@@ -97,7 +97,7 @@ takes 36.6 s of wall time and 3m42 of CPU (30 September 2026).
 | integration | `integrate` (summation), `background` (GLM), `shoebox`, `mask`, `profile_model`, `profile_grid`, `reference` (profiles and fitting), `postrefine`; `fit_device.hh`, `fit_batch`, `fit_cuda.cu`, `fit_metal.metal` and `fit_device_*.cc` (fitting on a GPU, `--gpu`) | `mxi_integrate` | `docs/integration.md`; `docs/gpu.md`, Integration |
 | symmetry | `symmetry` (space groups, via gemmi), `laue` | `mxi_symmetry` | `docs/symmetry.md` |
 | scaling | `scale`, `scale_model`, `resolution` | `mxi_scale` | `docs/scaling.md` |
-| formats and plumbing | `expt`, `refl` (msgpack by hand), `json`, `args`, `log_mirror`, `timing`, `parallel`, `summary` | | |
+| formats and plumbing | `expt`, `refl` (msgpack by hand, and DIALS's HDF5 tables read, `refl_hdf5`), `json`, `args`, `log_mirror`, `timing`, `parallel`, `summary` | | |
 
 Library files are `src/<name>.hh` and `.cc`. Six more programs are for looking
 at a step rather than doing it: `mxi_profile` estimates the profile model,

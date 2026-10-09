@@ -189,9 +189,77 @@ def loads(raw: bytes) -> ReflectionTable:
     return _from_document(doc)
 
 
+_HDF5_SIGNATURE = b"\x89HDF\r\n\x1a\n"
+
+
 def load(path: str) -> ReflectionTable:
+    """A ``.refl`` file: msgpack, as DIALS wrote them and mxi writes them, or
+    HDF5, as DIALS writes them from 2025 on -- told apart by HDF5's signature."""
     with open(path, "rb") as f:
-        return loads(f.read())
+        head = f.read(8)
+        if head == _HDF5_SIGNATURE:
+            return _from_hdf5(path)
+        return loads(head + f.read())
+
+
+def _hdf5_type(name: str, array: np.ndarray) -> str:
+    """DIALS's msgpack name for an HDF5 column, as mxi's reader names it."""
+    width = 1 if array.ndim == 1 else array.shape[1]
+    if name == "miller_index":
+        return "cctbx::miller::index<>"
+    if array.dtype == np.bool_:
+        return "bool"
+    if np.issubdtype(array.dtype, np.floating):
+        kinds = {1: "double", 2: "vec2<double>", 3: "vec3<double>", 9: "mat3<double>"}
+    elif np.issubdtype(array.dtype, np.unsignedinteger):
+        kinds = {1: "std::size_t"}
+    else:
+        kinds = {1: "int", 6: "int6"}
+    if width not in kinds:
+        raise ReflFormatError(
+            f"the HDF5 column {name} is of a kind not known here, {width} values a row"
+        )
+    return kinds[width]
+
+
+def _from_hdf5(path: str) -> ReflectionTable:
+    """Each data set a group /dials/processing/group_N, its experiment ids and
+    identifiers as attributes, each column a dataset of one row a reflection;
+    the groups' rows joined, in order."""
+    import h5py
+
+    columns: dict[str, list[np.ndarray]] = {}
+    identifiers: dict[int, str] = {}
+    with h5py.File(path, "r") as f:
+        k = 0
+        while f"dials/processing/group_{k}" in f:
+            group = f[f"dials/processing/group_{k}"]
+            ids = group.attrs.get("experiment_ids", [])
+            names = group.attrs.get("identifiers", [])
+            for i, name in zip(ids, names):
+                identifiers[int(i)] = (
+                    name.decode() if isinstance(name, bytes) else str(name)
+                )
+            for name, dataset in group.items():
+                if isinstance(dataset, h5py.Dataset):
+                    columns.setdefault(name, []).append(dataset[()])
+            k += 1
+        if k == 0:
+            raise ReflFormatError(
+                f"{path} is HDF5 but holds no /dials/processing/group_0"
+            )
+    table = ReflectionTable(nrows=0, identifiers=identifiers)
+    for name, parts in columns.items():
+        if len(parts) != k:
+            raise ReflFormatError(
+                f"the HDF5 column {name} is in some groups and not others"
+            )
+        array = np.concatenate(parts)
+        table.columns[name] = array
+        table.types[name] = _hdf5_type(name, array)
+    table.nrows = len(next(iter(table.columns.values()))) if table.columns else 0
+    table.validate()
+    return table
 
 
 def _text(value: object) -> object:

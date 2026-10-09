@@ -267,6 +267,14 @@ endif()
 enable_testing()
 
 find_package(HDF5 QUIET COMPONENTS C)
+# Reflection tables written as HDF5, as DIALS writes them now: read wherever
+# HDF5 is found, and without it refused by name.
+if(HDF5_FOUND)
+    target_sources(mxi PRIVATE src/refl_hdf5.cc)
+    target_compile_definitions(mxi PRIVATE MXI_HAVE_HDF5)
+    target_include_directories(mxi SYSTEM PRIVATE ${HDF5_C_INCLUDE_DIRS})
+    target_link_libraries(mxi PUBLIC ${HDF5_C_LIBRARIES})
+endif()
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bitshuffle/LICENSE")
     message(STATUS
             "spotfinder: bitshuffle submodule not checked out, skipping. "

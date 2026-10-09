@@ -449,10 +449,36 @@ void Table::validate() const {
   }
 }
 
+#ifdef MXI_HAVE_HDF5
+Table read_reflections_hdf5(const std::string &path); // refl_hdf5.cc
+#endif
+
 Table read_reflections(const std::string &path) {
   std::ifstream in(path, std::ios::binary);
   if (!in)
     throw ReflError("cannot open " + path);
+  // DIALS writes its tables as HDF5 from 2025 on, where it wrote msgpack: the
+  // HDF5 signature first, eight bytes, tells which. mxi still writes msgpack,
+  // which DIALS still reads.
+  {
+    char signature[8] = {};
+    in.read(signature, sizeof signature);
+    const bool hdf5 =
+        in.gcount() == 8 &&
+        std::string(signature, 8) == std::string("\x89HDF\r\n\x1a\n", 8);
+    in.clear();
+    in.seekg(0, std::ios::beg);
+    if (hdf5) {
+#ifdef MXI_HAVE_HDF5
+      return read_reflections_hdf5(path);
+#else
+      throw ReflError(path +
+                      " is a reflection table written as HDF5, as DIALS "
+                      "writes them now; this build of mxi has no HDF5 to read "
+                      "it with");
+#endif
+    }
+  }
   // Size, resize, one read. The obvious
   //
   //   std::string raw((std::istreambuf_iterator<char>(in)), {});
