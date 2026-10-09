@@ -262,8 +262,8 @@ pip install -e .
 ```
 
 Dependencies are numpy, scipy, msgpack and gemmi. Notably **not** cctbx or
-DIALS: `.refl` is msgpack -- or HDF5, as DIALS writes it from 2025 on, read
-with h5py when it is -- and `.expt` is JSON, and both are read directly, so
+DIALS: `.refl` is msgpack -- or HDF5, DIALS's layout (dials/dials#3255) or
+dxtbx-h5's, read with h5py when it is -- and `.expt` is JSON, and both are read directly, so
 the checks run in a container with no crystallographic software in it at all.
 
 ## When a file will not read

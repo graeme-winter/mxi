@@ -202,38 +202,88 @@ def load(path: str) -> ReflectionTable:
         return loads(head + f.read())
 
 
-def _hdf5_type(name: str, array: np.ndarray) -> str:
-    """DIALS's msgpack name for an HDF5 column, as mxi's reader names it."""
-    width = 1 if array.ndim == 1 else array.shape[1]
-    if name == "miller_index":
-        return "cctbx::miller::index<>"
-    if array.dtype == np.bool_:
+_DIALS_TYPES = {
+    "bool": "bool",
+    "int": "int",
+    "size_t": "std::size_t",
+    "double": "double",
+    "vec2_double": "vec2<double>",
+    "vec3_double": "vec3<double>",
+    "mat3_double": "mat3<double>",
+    "miller_index": "cctbx::miller::index<>",
+    "int6": "int6",
+}
+
+
+def _hdf5_type(dataset) -> str | None:
+    """DIALS's msgpack name for an HDF5 column, as mxi's reader names it: from
+    dials_type where the writer gave it (dxtbx-h5), else from dtype and shape;
+    None for a column mxi has no type for (float32, uint8, strings), left out."""
+    given = dataset.attrs.get("dials_type")
+    if given is not None:
+        given = given.decode() if isinstance(given, bytes) else str(given)
+        return _DIALS_TYPES.get(given)
+    shape, dtype = dataset.shape, dataset.dtype
+    width = 1 if len(shape) == 1 else int(np.prod(shape[1:]))
+    if dtype == np.bool_:
         return "bool"
-    if np.issubdtype(array.dtype, np.floating):
-        kinds = {1: "double", 2: "vec2<double>", 3: "vec3<double>", 9: "mat3<double>"}
-    elif np.issubdtype(array.dtype, np.unsignedinteger):
-        kinds = {1: "std::size_t"}
-    else:
-        kinds = {1: "int", 6: "int6"}
-    if width not in kinds:
-        raise ReflFormatError(
-            f"the HDF5 column {name} is of a kind not known here, {width} values a row"
-        )
-    return kinds[width]
+    if dtype == np.float64:
+        return {
+            1: "double",
+            2: "vec2<double>",
+            3: "vec3<double>",
+            9: "mat3<double>",
+        }.get(width)
+    if dtype.kind == "i" and width == 3 and len(shape) == 2:
+        return "cctbx::miller::index<>"  # there is no vec3 of integers
+    if dtype.kind == "i" and width == 6:
+        return "int6"
+    if dtype == np.uint64 and width == 1:
+        return "std::size_t"
+    if dtype == np.int32 and width == 1:
+        return "int"
+    return None
+
+
+def _table_groups(f) -> list:
+    """dxtbx-h5's /reflections/N, else DIALS's groups under the last group of
+    /dials, in the order written."""
+    import h5py
+
+    if "reflections" in f and isinstance(f["reflections"], h5py.Group):
+        names = [
+            k for k in f["reflections"] if isinstance(f["reflections"][k], h5py.Group)
+        ]
+        return [f["reflections"][k] for k in sorted(names, key=lambda k: (len(k), k))]
+    if "dials" in f:
+        kind = f.attrs.get("file_type")
+        kind = kind.decode() if isinstance(kind, bytes) else kind
+        if kind != "dials_processed_data":
+            raise ReflFormatError(
+                f"/dials present but file_type is {kind!r}, not dials_processed_data"
+            )
+        if int(f.attrs.get("file_version", 0)) != 1:
+            raise ReflFormatError("file_version is not 1, the one known here")
+        process = f["dials"][list(f["dials"].keys())[-1]]
+        return [g for g in process.values() if isinstance(g, h5py.Group)]
+    return []
 
 
 def _from_hdf5(path: str) -> ReflectionTable:
-    """Each data set a group /dials/processing/group_N, its experiment ids and
-    identifiers as attributes, each column a dataset of one row a reflection;
-    the groups' rows joined, in order."""
+    """Each table a group -- DIALS's /dials/<last>/<each>, or dxtbx-h5's
+    /reflections/N -- its experiment ids and identifiers attributes, each column
+    a dataset of one row a reflection; the groups' rows joined, in order.
+    Shoeboxes are not read here: mxeq has no use for them."""
     import h5py
 
     columns: dict[str, list[np.ndarray]] = {}
+    types: dict[str, str] = {}
     identifiers: dict[int, str] = {}
     with h5py.File(path, "r") as f:
-        k = 0
-        while f"dials/processing/group_{k}" in f:
-            group = f[f"dials/processing/group_{k}"]
+        groups = _table_groups(f)
+        if not groups:
+            raise ReflFormatError(f"{path} is HDF5 but holds no reflection table")
+        for group in groups:
             ids = group.attrs.get("experiment_ids", [])
             names = group.attrs.get("identifiers", [])
             for i, name in zip(ids, names):
@@ -241,22 +291,24 @@ def _from_hdf5(path: str) -> ReflectionTable:
                     name.decode() if isinstance(name, bytes) else str(name)
                 )
             for name, dataset in group.items():
-                if isinstance(dataset, h5py.Dataset):
-                    columns.setdefault(name, []).append(dataset[()])
-            k += 1
-        if k == 0:
-            raise ReflFormatError(
-                f"{path} is HDF5 but holds no /dials/processing/group_0"
-            )
+                if not isinstance(dataset, h5py.Dataset):
+                    continue
+                kind = _hdf5_type(dataset)
+                if kind is None:
+                    continue
+                types[name] = kind
+                array = dataset[()]
+                if array.ndim == 3:
+                    array = array.reshape(array.shape[0], -1)
+                columns.setdefault(name, []).append(array)
     table = ReflectionTable(nrows=0, identifiers=identifiers)
     for name, parts in columns.items():
-        if len(parts) != k:
+        if len(parts) != len(groups):
             raise ReflFormatError(
-                f"the HDF5 column {name} is in some groups and not others"
+                f"the HDF5 column {name} is in some table groups and not others"
             )
-        array = np.concatenate(parts)
-        table.columns[name] = array
-        table.types[name] = _hdf5_type(name, array)
+        table.columns[name] = np.concatenate(parts)
+        table.types[name] = types[name]
     table.nrows = len(next(iter(table.columns.values()))) if table.columns else 0
     table.validate()
     return table

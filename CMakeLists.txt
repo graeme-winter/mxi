@@ -286,6 +286,16 @@ else()
     include(cmake/spots.cmake)
 endif()
 
+# DIALS's HDF5 tables compress shoeboxes with LZ4, which HDF5 reads only with a
+# plugin: without one, mxi decompresses the chunks itself, with the LZ4 the spot
+# finder builds, where it builds -- and reads them with H5Dread_chunk, whose two
+# shapes the spot finder's probe tells apart.
+if(TARGET bitshuffle)
+    target_link_libraries(mxi PRIVATE bitshuffle)
+    target_compile_definitions(mxi PRIVATE MXI_HAVE_LZ4
+        $<$<BOOL:${SPOTFINDER_H5DREAD_CHUNK_TAKES_SIZE}>:SPOTFINDER_H5DREAD_CHUNK_TAKES_SIZE>)
+endif()
+
 # Profile fitting on a device, for mxi_integrate --gpu: CUDA's kernel where the
 # spot finder's CUDA is on, and otherwise the stubs, which fit in single
 # precision on the CPU instead.
