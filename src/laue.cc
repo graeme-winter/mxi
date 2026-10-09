@@ -1,5 +1,7 @@
 #include "laue.hh"
 
+#include <gemmi/it92.hpp>
+
 #include "parallel.hh"
 
 #include "resolution.hh"
@@ -7,6 +9,7 @@
 #include "timing.hh"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <numeric>
@@ -108,32 +111,187 @@ std::vector<Rotation> symmetry_elements(const std::vector<Rotation> &lattice) {
   return out;
 }
 
-std::size_t normalise(P1Intensities &data, std::size_t per_shell) {
-  std::vector<std::size_t> order(data.size());
-  std::iota(order.begin(), order.end(), std::size_t{0});
-  std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
-    return data.d[a] > data.d[b];
-  });
-  for (std::size_t start = 0; start < order.size(); start += per_shell) {
-    std::size_t end = std::min(order.size(), start + per_shell);
-    if (order.size() - end < per_shell / 2)
-      end = order.size(); // no shell of a handful at the end
-    double mean = 0.0;
-    for (std::size_t k = start; k < end; ++k)
-      mean += data.i[order[k]] / static_cast<double>(end - start);
-    if (mean > 0.0)
-      for (std::size_t k = start; k < end; ++k) {
-        data.i[order[k]] /= mean;
-        data.sigma[order[k]] /= mean;
+namespace {
+
+// The mean of carbon's, nitrogen's and oxygen's squared scattering factors at
+// d: a light atom's, as near right for a small molecule as for a protein.
+double mean_f2(double d) {
+  using It = gemmi::IT92<double>;
+  const double stol2 = 1.0 / (4.0 * d * d);
+  double sum = 0.0;
+  for (gemmi::El el : {gemmi::El::C, gemmi::El::N, gemmi::El::O}) {
+    const double f = It::get(el, 0).calculate_sf(stol2);
+    sum += f * f;
+  }
+  return sum / 3.0;
+}
+
+std::array<double, 6> q_of(const Miller &h) {
+  const double a = h[0], b = h[1], c = h[2];
+  return {a * a, b * b, c * c, 2 * a * b, 2 * a * c, 2 * b * c};
+}
+
+// Wilson's maximum likelihood, acentric: minus the log likelihood is
+// sum I/S + ln S, S = k f2 exp(-q.b), convex in (ln k, b), so Newton's method,
+// halving a step that does not lower it. Negative intensities as zero.
+WilsonFit fit_wilson(const P1Intensities &data) {
+  WilsonFit fit;
+  std::vector<std::size_t> rows;
+  for (std::size_t k = 0; k < data.size(); ++k) {
+    const double ds2 = 1.0 / (data.d[k] * data.d[k]);
+    if (ds2 > 0.008 && ds2 < 0.690 && std::isfinite(data.i[k]))
+      rows.push_back(k);
+  }
+  fit.used = rows.size();
+  if (rows.size() < 100)
+    return fit;
+  std::vector<double> lf2(rows.size()), ipos(rows.size());
+  std::vector<std::array<double, 6>> q(rows.size());
+  double mean_i = 0.0, mean_f = 0.0;
+  for (std::size_t r = 0; r < rows.size(); ++r) {
+    const std::size_t k = rows[r];
+    const double f2 = mean_f2(data.d[k]);
+    lf2[r] = std::log(f2);
+    ipos[r] = std::max(0.0, data.i[k]);
+    q[r] = q_of(data.hkl[k]);
+    mean_i += ipos[r];
+    mean_f += f2;
+  }
+  if (!(mean_i > 0.0))
+    return fit;
+  std::array<double, 7> theta{std::log(mean_i / mean_f), 0, 0, 0, 0, 0, 0};
+  const auto nll = [&](const std::array<double, 7> &t) {
+    double sum = 0.0;
+    for (std::size_t r = 0; r < rows.size(); ++r) {
+      double x = t[0] + lf2[r];
+      for (int j = 0; j < 6; ++j)
+        x -= q[r][static_cast<std::size_t>(j)] *
+             t[static_cast<std::size_t>(j + 1)];
+      sum += ipos[r] * std::exp(-x) + x;
+    }
+    return sum;
+  };
+  double current = nll(theta);
+  for (int it = 0; it < 100; ++it) {
+    double g[7] = {0}, H[7][7] = {{0}};
+    for (std::size_t r = 0; r < rows.size(); ++r) {
+      double x = theta[0] + lf2[r];
+      for (int j = 0; j < 6; ++j)
+        x -= q[r][static_cast<std::size_t>(j)] *
+             theta[static_cast<std::size_t>(j + 1)];
+      const double ratio = ipos[r] * std::exp(-x); // I / S
+      double a[7] = {1.0};
+      for (int j = 0; j < 6; ++j)
+        a[j + 1] = -q[r][static_cast<std::size_t>(j)];
+      for (int u = 0; u < 7; ++u) {
+        g[u] += (1.0 - ratio) * a[u];
+        for (int v = 0; v < 7; ++v)
+          H[u][v] += ratio * a[u] * a[v];
       }
-    if (end == order.size())
+    }
+    // Solve H step = -g by Gaussian elimination with partial pivoting.
+    double m[7][8];
+    for (int u = 0; u < 7; ++u) {
+      for (int v = 0; v < 7; ++v)
+        m[u][v] = H[u][v] + (u == v ? 1e-12 * (1.0 + std::fabs(H[u][u])) : 0.0);
+      m[u][7] = -g[u];
+    }
+    for (int col = 0; col < 7; ++col) {
+      int pivot = col;
+      for (int r = col + 1; r < 7; ++r)
+        if (std::fabs(m[r][col]) > std::fabs(m[pivot][col]))
+          pivot = r;
+      for (int v = 0; v < 8; ++v)
+        std::swap(m[col][v], m[pivot][v]);
+      if (std::fabs(m[col][col]) < 1e-300)
+        return fit;
+      for (int r = 0; r < 7; ++r) {
+        if (r == col)
+          continue;
+        const double f = m[r][col] / m[col][col];
+        for (int v = col; v < 8; ++v)
+          m[r][v] -= f * m[col][v];
+      }
+    }
+    std::array<double, 7> step;
+    for (int u = 0; u < 7; ++u)
+      step[static_cast<std::size_t>(u)] = m[u][7] / m[u][u];
+    double scale = 1.0, next = current;
+    std::array<double, 7> trial = theta;
+    for (int halving = 0; halving < 40; ++halving) {
+      for (std::size_t u = 0; u < 7; ++u)
+        trial[u] = theta[u] + scale * step[u];
+      next = nll(trial);
+      if (next <= current)
+        break;
+      scale *= 0.5;
+    }
+    if (!(next <= current))
       break;
+    const double change = current - next;
+    theta = trial;
+    current = next;
+    fit.iterations = it + 1;
+    if (change <= 1e-10 * std::fabs(current))
+      break;
+  }
+  fit.fitted = std::isfinite(current);
+  fit.log_scale = theta[0];
+  for (int j = 0; j < 6; ++j)
+    fit.b[j] = theta[static_cast<std::size_t>(j + 1)];
+  return fit;
+}
+
+} // namespace
+
+std::size_t normalise(P1Intensities &data, std::size_t per_shell,
+                      WilsonFit *fit_out) {
+  // E^2 by shells of equal count, for the Wilson outliers alone.
+  std::vector<double> e2(data.size(), 0.0);
+  {
+    std::vector<std::size_t> order(data.size());
+    std::iota(order.begin(), order.end(), std::size_t{0});
+    std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+      return data.d[a] > data.d[b];
+    });
+    for (std::size_t start = 0; start < order.size(); start += per_shell) {
+      std::size_t end = std::min(order.size(), start + per_shell);
+      if (order.size() - end < per_shell / 2)
+        end = order.size(); // no shell of a handful at the end
+      double mean = 0.0;
+      for (std::size_t k = start; k < end; ++k)
+        mean += data.i[order[k]] / static_cast<double>(end - start);
+      for (std::size_t k = start; k < end; ++k)
+        e2[order[k]] = mean > 0.0 ? data.i[order[k]] / mean : 0.0;
+      if (end == order.size())
+        break;
+    }
+  }
+  // The intensities themselves by the fitted model's scale and anisotropic
+  // fall-off, as ml_normalise_aniso; by the shells, as before, if it could not
+  // be fitted.
+  const WilsonFit fit = fit_wilson(data);
+  if (fit_out)
+    *fit_out = fit;
+  for (std::size_t k = 0; k < data.size(); ++k) {
+    double factor;
+    if (fit.fitted) {
+      const std::array<double, 6> q = q_of(data.hkl[k]);
+      double qb = 0.0;
+      for (std::size_t j = 0; j < 6; ++j)
+        qb += q[j] * fit.b[j];
+      factor = std::exp(qb - fit.log_scale);
+    } else {
+      factor = e2[k] != 0.0 && data.i[k] != 0.0 ? e2[k] / data.i[k] : 1.0;
+    }
+    data.i[k] *= factor;
+    data.sigma[k] *= factor;
   }
   // Wilson outliers, E^2 of 16 or more, as dials.symmetry removes them.
   P1Intensities kept;
   std::size_t removed = 0;
   for (std::size_t k = 0; k < data.size(); ++k) {
-    if (data.i[k] >= 16.0) {
+    if (e2[k] >= 16.0) {
       ++removed;
       continue;
     }

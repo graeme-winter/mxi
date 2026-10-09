@@ -58,7 +58,31 @@ void select_resolution(P1Intensities &data, double d_min);
 //: maximum-likelihood model -- so that correlations compare like with like.
 //: Wilson outliers, E^2 of 16 or more, are then removed, as dials.symmetry
 //: removes them; returns how many.
-std::size_t normalise(P1Intensities &data, std::size_t per_shell = 200);
+//: The anisotropic Wilson model the intensities were normalised by: their
+//: expectation k f2(s) exp(-q.b), q = (h^2, k^2, l^2, 2hk, 2hl, 2kl), fitted by
+//: Wilson's maximum likelihood; f2 the mean of carbon's, nitrogen's and
+//: oxygen's squared scattering factors.
+struct WilsonFit {
+  bool fitted = false;    //: false: too few reflections, shells used instead
+  double log_scale = 0.0; //: ln k
+  double b[6] = {0, 0, 0, 0, 0, 0};
+  int iterations = 0;
+  std::size_t used = 0; //: reflections in the window fitted
+};
+
+//: The intensities normalised as dials.symmetry's ml_aniso normalises them:
+//: divided by the scale and the anisotropic fall-off of a Wilson model fitted
+//: over cctbx's window, d*^2 from 0.008 to 0.690, its atoms' own fall-off --
+//: f2(s) -- left in, as ml_normalise_aniso leaves it. Not the shells it was,
+//: which flattened every resolution to a mean of one and gave the noisiest
+//: pairs the weight of the strongest: on a P 4_1 crystal the identity's CC
+//: was 0.79 where dials.symmetry's is 0.95, and the space group came out P 1.
+//: Without cctbx's protein-specific terms -- the solvent's ripple, the content
+//: from a Matthews coefficient -- so a weak prior, as near right for a small
+//: molecule as for a protein. Wilson outliers, E^2 of 16 or more by shells,
+//: removed as before; their number returned.
+std::size_t normalise(P1Intensities &data, std::size_t per_shell = 200,
+                      WilsonFit *fit = nullptr);
 
 struct ElementScore {
   Rotation rotation;

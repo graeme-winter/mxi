@@ -45,8 +45,25 @@ every subgroup's, the space groups judged by their absences, and the choice.
 2. **Each element and each subgroup scored** as Evans (2011) A1 and A2, read
    from dials.symmetry's source: elements counted as it counts them, 17 for
    m-3m; E(CC; S) and sigma(CC) estimated as it does. Intensities merged in P1
-   and quasi-normalised by resolution, where dials.symmetry fits an anisotropic
-   maximum-likelihood model.
+   and normalised as dials.symmetry's ml_aniso normalises them: an anisotropic
+   Wilson model, E(I) = k f2(s) exp(-q.b) with q the six products of the
+   indices, fitted by Wilson's maximum likelihood over cctbx's window, d*^2 from
+   0.008 to 0.690, and the intensities divided by k and the exponential -- the
+   atoms' own fall-off, f2, left in, so that the strong reflections still weigh
+   most in a correlation. f2 is carbon's, nitrogen's and oxygen's mean, and
+   nothing else of cctbx's protein model -- no solvent ripple, no content from
+   a Matthews coefficient -- so a weak prior, near right for a small molecule
+   too (Graeme's choice of the options, October 2026). It was quasi-
+   normalisation by resolution shells, which flattened every resolution to one
+   and gave the noisiest pairs the weight of the best: on a P 4_1 crystal, 43.6,
+   43.6, 212 A, the identity's CC 0.776 where dials.symmetry has 0.95 on the
+   same data, the 4-fold's 0.656, and P 1 chosen. Now 0.842 and 0.841, P 4/m by
+   0.791 against 0.154, and P 4_1. The B fitted, 52, 54 and 84 A^2 along a*,
+   b*, c*, is larger than dials.symmetry's 4 to 8, its protein model taking more
+   of the fall-off as the atoms', so mxi's CCs lie between the shells' and
+   dials.symmetry's. Insulin I 2 3, the small molecule P 4 2 2, as before. The
+   Wilson outliers are still found from E^2 by shells, as dials.symmetry finds
+   them.
 3. **The space group** from the absences, among the chiral groups with that
    Patterson group: consistent if what it forbids beyond its centring has mean
    I/sigma of 3 or less, and of those the one explaining most; a tie to the
@@ -82,7 +99,8 @@ were right -- they keep the cell's metric to 0.2 per cent, transposed they are
   finer of CC half above 0.6 and <I>/<sigma> above 4 (1.68 A there); this scored
   to the detector's corner, 176220 reflections with mates merged where
   dials.symmetry kept 173252 with mates apart, most of them beyond the
-  diffraction. Quasi-normalised, noise weighs as much as signal in a correlation.
+  diffraction. Quasi-normalised -- as it then was -- noise weighed as much as
+  signal in a correlation.
   Now the same limit, with dials.symmetry's other filters: observations with
   I/sigma below -5, and Wilson outliers of E^2 16 or more.
 * **Friedel mates merged.** The identity then compared each reflection with

@@ -186,9 +186,11 @@ against 9580 on one sweep -- and is item 12.
 **Symmetry** (`docs/symmetry.md`) follows `dials.symmetry`: the lattice's
 symmetry by Le Page's method through gemmi, each element scored and each
 subgroup after Evans (2011), to a resolution limit from CC half, Friedel mates
-apart; then the space group by absences. Departures: intensities normalised in
-resolution shells where DIALS fits an anisotropic maximum-likelihood model (the
-identity's CC 0.858 against 0.931 on one sweep, both choosing I m -3); monoclinic
+apart; then the space group by absences. Departures: intensities normalised by
+an anisotropic Wilson model with a light atom's scattering and nothing of
+DIALS's protein model -- a weaker prior, so B comes out larger and the CCs a
+little lower than DIALS's (the identity's 0.842 against 0.95 on a P 4_1
+crystal, both choosing P 4_1; resolution shells, before, chose P 1); monoclinic
 groups named C 1 2/m 1, the reference setting, where DIALS chooses beta nearest
 90; and on one cubic sweep the two chose opposite sides of the indexing
 ambiguity, both right for one sweep.

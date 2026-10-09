@@ -2,6 +2,8 @@
 #include <map>
 #include <random>
 
+#include <gemmi/it92.hpp>
+
 #include "../src/laue.hh"
 #include "../src/parallel.hh"
 #include "check.hh"
@@ -189,6 +191,60 @@ TEST(the_laue_scores_are_the_same_on_any_number_of_threads) {
                        one.groups[k].rotations == eight.groups[k].rotations,
                    "subgroup " + std::to_string(k) +
                        " the same, in the same place");
+}
+
+} // namespace mxi
+
+namespace mxi {
+
+TEST(the_wilson_model_recovers_an_anisotropic_b) {
+  // Merged intensities of a 43.6, 43.6, 212 A cell, as Graeme's P 4_1 crystal,
+  // drawn from Wilson's distribution about a light atom's fall-off and an
+  // anisotropic B of 50, 55 and 85 A^2 along a*, b*, c*: the fit -- Wilson's
+  // maximum likelihood, the B in the exponent of the indices -- gives them
+  // back, and normalising removes them, leaving the atoms' own fall-off in.
+  const double a = 43.6, c = 212.0;
+  const double B[3] = {50.0, 55.0, 85.0};
+  const double b[3] = {B[0] / (2 * a * a), B[1] / (2 * a * a),
+                       B[2] / (2 * c * c)};
+  std::mt19937 rng(11);
+  std::exponential_distribution<double> wilson(1.0);
+  P1Intensities data;
+  for (int h = -14; h <= 14; ++h)
+    for (int k = -14; k <= 14; ++k)
+      for (int l = -70; l <= 70; ++l) {
+        if (h == 0 && k == 0 && l == 0)
+          continue;
+        const double ds2 = (h * h + k * k) / (a * a) + l * l / (c * c);
+        if (ds2 > 1.0 / (3.0 * 3.0))
+          continue;
+        const double d = 1.0 / std::sqrt(ds2);
+        // The light atom's f^2 the fit assumes: carbon's, nitrogen's and
+        // oxygen's, mean of the squares.
+        double f2 = 0.0;
+        for (gemmi::El el : {gemmi::El::C, gemmi::El::N, gemmi::El::O}) {
+          const double f =
+              gemmi::IT92<double>::get(el, 0).calculate_sf(ds2 / 4.0);
+          f2 += f * f / 3.0;
+        }
+        const double mean =
+            1000.0 * f2 *
+            std::exp(-(b[0] * h * h + b[1] * k * k + b[2] * l * l));
+        data.hkl.push_back({h, k, l});
+        data.i.push_back(mean * wilson(rng));
+        data.sigma.push_back(1.0);
+        data.d.push_back(d);
+      }
+  WilsonFit fit;
+  normalise(data, 200, &fit);
+  check::is_true(fit.fitted, "the model fitted");
+  // Within 2 A^2: the intensities are one draw each from Wilson's
+  // distribution, about 50000 of them.
+  check::close(2 * fit.b[0] * a * a, B[0], 2.0, "B along a*");
+  check::close(2 * fit.b[1] * a * a, B[1], 2.0, "B along b*");
+  check::close(2 * fit.b[2] * c * c, B[2], 2.0, "B along c*");
+  // And none between a* and b*, in the same units: within 1 A^2.
+  check::close(2 * fit.b[3] * a * a, 0.0, 1.0, "no cross term");
 }
 
 } // namespace mxi

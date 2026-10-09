@@ -115,7 +115,24 @@ int run_program(int argc, char **argv) {
                 selection.d_min_cc_half, selection.d_min_i_over_sigma,
                 selection.d_min);
     P1Intensities normalised = merged;
-    const std::size_t wilson = normalise(normalised);
+    WilsonFit wilson_fit;
+    const std::size_t wilson = normalise(normalised, 200, &wilson_fit);
+    if (wilson_fit.fitted) {
+      // B along each reciprocal axis, in A^2: the exponent's b times twice the
+      // cell edge squared -- for a cell near orthogonal, what dials.symmetry
+      // reports as B_cart's diagonal.
+      std::printf(
+          "Normalised by an anisotropic Wilson model, %zu reflections "
+          "fitted in %d steps: B %.2f, %.2f, %.2f A^2 along a*, b*, c*\n",
+          wilson_fit.used, wilson_fit.iterations,
+          2.0 * wilson_fit.b[0] * cell.a * cell.a,
+          2.0 * wilson_fit.b[1] * cell.b * cell.b,
+          2.0 * wilson_fit.b[2] * cell.c * cell.c);
+    } else {
+      std::printf("Too few reflections for a Wilson model (%zu): normalised "
+                  "in shells instead\n",
+                  wilson_fit.used);
+    }
     phase("normalising");
     std::printf("%zu Wilson outliers removed, E^2 of 16 or more\n", wilson);
     const std::vector<Rotation> lattice =
