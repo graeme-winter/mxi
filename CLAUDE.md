@@ -160,15 +160,18 @@ Graeme's objection, and never built.
   verify`, copied to `/mnt/user-data/outputs/mxi.bundle`; then a fresh
   clone, `git submodule update --init`, `cmake -DMXI_FFTW=ON`, a build and every
   suite from it, before `present_files`.
-* **The reference chain**, 300 images of insulin, from the uploads:
-  `mxi_find -e /mnt/user-data/uploads/imported.expt -j 4 -o strong.refl`;
-  `mxi_index /mnt/user-data/uploads/imported.expt strong.refl`;
-  `mxi_refine indexed.expt indexed.refl --analytic --scan-varying 5` (on 30
+* **The reference chain**, 300 images of insulin, from the uploads, one
+  `.rflx` a step (`docs/rflx.md`; `--output-expt` and `--output-refl` for the
+  DIALS pair instead):
+  `mxi_find -e /mnt/user-data/uploads/imported.expt -j 4` (strong.rflx: the
+  models with the spots);
+  `mxi_index strong.rflx`;
+  `mxi_refine indexed.rflx --analytic --scan-varying 5` (on 30
   degrees the default, scan-varying at one point per 10 degrees and at least
   five, gives the same bytes);
-  `mxi_integrate refined.expt refined.refl --threads 4`;
-  `mxi_symmetry integrated.expt integrated.refl`;
-  `mxi_scale symmetrized.expt symmetrized.refl`. It gives I 2 3 by
+  `mxi_integrate refined.rflx --threads 4`;
+  `mxi_symmetry integrated.rflx`;
+  `mxi_scale symmetrized.rflx`. It gives I 2 3 by
   b+c,a+c,a+b, Rmeas 0.041, error model a 1.009 and b 0.0244 (1.017 and 0.0236
   with five scan blocks, the default before 29 September 2026).
 * **A CUDA compile check** is possible here, not a run: `apt-get install

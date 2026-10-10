@@ -28,7 +28,12 @@ does too.
 
 ## Running it
 
-    mxi_symmetry integrated.expt integrated.refl     # symmetrized.expt, symmetrized.refl
+    mxi_symmetry integrated.rflx      # symmetrized.rflx
+
+or from and to the DIALS pair, as `docs/rflx.md` describes:
+
+    mxi_symmetry integrated.expt integrated.refl \
+        --output-expt symmetrized.expt --output-refl symmetrized.refl
 
 `--max-delta D` sets the lattice's tolerance in degrees of obliquity (2). It
 prints what it merged and to what resolution, each symmetry element's score,

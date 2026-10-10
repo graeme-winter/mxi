@@ -20,7 +20,11 @@ decay and the paper's spherical harmonics for the absorption surface.
 
 ## Running it
 
-    mxi_scale symmetrized.expt symmetrized.refl      # scaled.expt, scaled.refl
+    mxi_scale symmetrized.rflx      # scaled.rflx
+
+or from and to the DIALS pair, as `docs/rflx.md` describes:
+
+    mxi_scale symmetrized.expt symmetrized.refl -o scaled.refl --output-expt scaled.expt
 
 The space group is the crystal's, as `mxi_symmetry` wrote it (`docs/symmetry.md`).
 `--space-group` and `--change-of-basis` override it for data that have not been
@@ -105,10 +109,13 @@ per cent of its eleven parameters have sigma over half their value.
 A scaled, unmerged reflection table with dials.scale's columns --
 `inverse_scale_factor` and its variance, `intensity.scale.value` and variance --
 and its flags (scaled, bit 26; an outlier in scaling, bit 23; excluded, bit 24)
-ADDED to those integration set, and dials.merge takes it.
+ADDED to those integration set, and dials.merge takes it -- as the DIALS pair,
+written by `-o scaled.refl --output-expt scaled.expt` or from `scaled.rflx` by
+`mxi_convert scaled.rflx`.
 The intensity's variance already carries the scale's uncertainty, as dials.scale's
 does, so nothing downstream should add `inverse_scale_factor_variance` to it
-again. The models, reindexed, go to `scaled.expt`. It prints the model, the error
+again. The models, reindexed, go with it, into `scaled.rflx` (`scaled.expt` in the
+pair). It prints the model, the error
 model, merging statistics in twenty shells and dials.scale's summary. HTML
 reports are for a later mxi_report, MTZ and mmCIF for a later mxi_export.
 

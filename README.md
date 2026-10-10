@@ -134,7 +134,8 @@ mxi_import ins10_1.nxs ins10_2.nxs ins10_3.nxs ins10_4.nxs  # one experiment a s
 
 -- the four sweeps of cubic insulin, each at its own orientation, of
 https://zenodo.org/records/8376818, on which the chain works well.
-`dials.merge` takes `scaled.refl` to make a merged MTZ file.
+`dials.merge` makes a merged MTZ file from the DIALS pair, which
+`mxi_convert scaled.rflx` writes.
 
 On the 3600 images of an EIGER2 XE 16M sweep -- `ins10_1.nxs` of
 https://zenodo.org/records/8376818 -- on an M4 Max MacBook, that chain with
@@ -354,8 +355,8 @@ same sweeps; the error model's differences from dials.scale's are findings
 about dials.scale, listed in `docs/outstanding.md`.
 
 ```sh
-mxi_symmetry integrated.expt integrated.refl     # symmetrized.expt, .refl
-mxi_scale symmetrized.expt symmetrized.refl      # scaled.expt, .refl
+mxi_symmetry integrated.rflx      # symmetrized.rflx
+mxi_scale symmetrized.rflx        # scaled.rflx
 ```
 
 **The spot finder runs on the GPU, Metal and CUDA, and the two agree exactly.**

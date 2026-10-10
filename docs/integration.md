@@ -2,7 +2,10 @@
 
 `mxi_integrate` integrates rotation data by summation and by profile fitting,
 and writes a reflection table that DIALS reads -- `dials.scale`,
-`dials.export` and `dials.image_viewer` take it as they take their own.
+`dials.export` and `dials.image_viewer` take it as they take their own, as the
+DIALS pair: written by `-o integrated.refl --output-expt integrated.expt`, or
+from `integrated.rflx`, what it writes otherwise (`docs/rflx.md`), by
+`mxi_convert integrated.rflx`.
 
 This is the reference: what it does, how to run it, what it writes, the
 conventions it follows, and what is still open. **Why** it is the way it is --
@@ -48,7 +51,8 @@ Speed, on a 3600 image Eiger 16M sweep, 1.08 million reflections, 16 threads
 
 ## Running it
 
-    mxi_integrate refined.expt refined.refl -o integrated.refl
+    mxi_integrate refined.rflx                                    # integrated.rflx
+    mxi_integrate refined.expt refined.refl -o integrated.refl    # the DIALS pair
 
 `refined.expt` is a refined experiment, scan-static or scan-varying.
 `refined.refl` is optional: given, the profile model is estimated from its
@@ -57,8 +61,9 @@ be INDEXED reflections -- the estimate needs each spot's predicted diffracted
 beam -- so the spot finder's `strong.refl` will not do, and says so. The images
 are found from the `.expt`'s imageset template, or named with `--images`.
 
-Every run writes `integrated.refl` and `integrated.expt` (`-o`, `--output-expt`):
-the models integrated with, and the profile model used as DIALS' `gaussian_rs`
+Every run writes `integrated.rflx` -- or the pair, `integrated.refl` and
+`integrated.expt`, when `-o` names a `.refl` or `--output-expt` is given -- the
+reflections and the models integrated with, and the profile model used as DIALS' `gaussian_rs`
 block -- what `mxi_symmetry` and anything after it read. Integrating again from
 that `.expt` alone takes the profile model from its block, and reproduces the
 first integration byte for byte.

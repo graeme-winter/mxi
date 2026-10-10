@@ -6,8 +6,9 @@ redhorn-archive's for thaumatin (thau_1_3) -- its goniometer, axes, sensor, mu,
 trusted range and scan identical to dials.import's on insulin. To be made right on the population of
 data sets one at a time, `mxeq compare-expt` saying what differs.
 
-`mxi_import master.nxs` writes `imported.expt`, as `dials.import master.nxs`
-does, so that nothing of DIALS is needed for the chain. `mxi_import a.nxs
+`mxi_import master.nxs` writes `imported.rflx` (`docs/rflx.md`) -- or, with
+`-o imported.expt`, the `.expt` that `dials.import master.nxs` writes -- so that
+nothing of DIALS is needed for the chain. `mxi_import a.nxs
 b.nxs` writes one experiment a master, as dials.import writes several sweeps:
 each with a beam, detector, goniometer, scan and image set of its own, the
 experiments' indices numbered past those before, each its own identifier. The
@@ -126,7 +127,7 @@ used is said.
 
     dials.import master.nxs output.experiments=dials.expt
     mxi_import master.nxs
-    mxeq compare-expt imported.expt dials.expt
+    mxeq compare-expt imported.rflx dials.expt     # mxeq reads either kind
 
 prints each model's parts, "same" or the difference: origins in mm, axes in
 degrees, numbers relatively. On insulin, against dials.import of the full 16M
