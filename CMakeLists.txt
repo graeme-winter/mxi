@@ -107,6 +107,7 @@ add_library(mxi
   src/json.cc
   src/expt.cc
   src/refl.cc
+  src/rflx.cc
   src/fft.cc
   $<$<BOOL:${MXI_FFTW}>:src/fft_fftw.cc>
   src/index.cc
@@ -206,19 +207,19 @@ add_executable(mxi_forward apps/mxi_forward.cc)
 target_link_libraries(mxi_forward PRIVATE mxi)
 target_compile_options(mxi_forward PRIVATE -Wall -Wextra)
 
+add_executable(mxi_convert apps/mxi_convert.cc)
+target_link_libraries(mxi_convert PRIVATE mxi)
+target_compile_options(mxi_convert PRIVATE -Wall -Wextra)
+
 add_executable(mxi_grid apps/mxi_grid.cc)
 target_link_libraries(mxi_grid PRIVATE mxi)
 target_compile_options(mxi_grid PRIVATE -Wall -Wextra)
 
-# The spot finder, which needs HDF5 and the bitshuffle submodule. Both are
-# checked rather than required, so that a machine with neither still configures
-# and still builds and tests everything else -- the clean-clone check has caught
-# several real problems in this repository and it has to keep working on a
-# machine that cannot build the whole of it.
-#
-# Its own CMakeLists calls find_package(HDF5 REQUIRED), which would abort the
-# whole configure rather than skip one subdirectory, so the decision is made
-# here before the subdirectory is entered.
+# The spot finder, which needs HDF5 and the bitshuffle submodule. HDF5 is
+# required of the whole build (below); the submodule is checked rather than
+# required, so that a clone without it still configures and builds and tests
+# everything else -- the clean-clone check has caught several real problems in
+# this repository and it has to keep working on such a machine.
 #
 # enable_testing() is called BEFORE it, not after: a subdirectory's add_test
 # calls are only registered with the top-level CTest if testing was enabled
@@ -266,13 +267,16 @@ endif()
 
 enable_testing()
 
-find_package(HDF5 QUIET COMPONENTS C)
+# HDF5 is required (docs/rflx.md, Graeme's decision, October 2026): mxi's own
+# files, .rflx, are HDF5, and so every program needs it, not only the spot
+# finder and the importer.
+find_package(HDF5 REQUIRED COMPONENTS C)
+target_include_directories(mxi SYSTEM PUBLIC ${HDF5_C_INCLUDE_DIRS})
+target_link_libraries(mxi PUBLIC ${HDF5_C_LIBRARIES})
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bitshuffle/LICENSE")
     message(STATUS
             "spotfinder: bitshuffle submodule not checked out, skipping. "
             "git submodule update --init --recursive")
-elseif(NOT HDF5_FOUND)
-    message(STATUS "spotfinder: HDF5 not found, skipping")
 else()
     message(STATUS "spotfinder: building")
     include(cmake/spots.cmake)
@@ -338,6 +342,7 @@ add_executable(mxi_tests
   tests/test_symmetry.cc
   tests/test_lattice.cc
   tests/test_laue.cc
+  tests/test_rflx.cc
   tests/test_space_group.cc
   tests/test_resolution.cc
   tests/test_timing.cc

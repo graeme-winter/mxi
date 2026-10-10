@@ -190,6 +190,12 @@ def loads(raw: bytes) -> ReflectionTable:
 
 
 def load(path: str) -> ReflectionTable:
+    """A .refl, msgpack, or a .rflx's reflections (mxeq.rflx), told by what
+    the file is."""
+    from mxeq import rflx
+
+    if rflx.is_hdf5(path):
+        return rflx.load_table(path)
     with open(path, "rb") as f:
         return loads(f.read())
 

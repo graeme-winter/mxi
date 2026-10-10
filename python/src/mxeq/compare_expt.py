@@ -185,8 +185,9 @@ def compare(
 def compare_files(path_a: str, path_b: str) -> Comparison:
     """Experiment by experiment when both lists hold the same number -- several
     sweeps, each compared with its counterpart -- otherwise the first of each."""
-    with open(path_a) as fa, open(path_b) as fb:
-        a, b = json.load(fa), json.load(fb)
+    from mxeq import rflx
+
+    a, b = rflx.experiments_dict(path_a), rflx.experiments_dict(path_b)
     na, nb = len(a.get("experiment", [])), len(b.get("experiment", []))
     if na != nb or na <= 1:
         c = compare(a, b, path_a, path_b)

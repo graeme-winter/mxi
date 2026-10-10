@@ -95,8 +95,9 @@ class Geometry:
 
 
 def geometry(expt_path: str) -> Geometry:
-    with open(expt_path) as f:
-        e = json.load(f)
+    from mxeq import rflx
+
+    e = rflx.experiments_dict(expt_path)
     b, p = e["beam"][0], e["detector"][0]["panels"][0]
     osc = e["scan"][0]["properties"]["oscillation"] if e.get("scan") else [0.0, 0.0]
     width = osc[1] - osc[0] if len(osc) > 1 else 0.0

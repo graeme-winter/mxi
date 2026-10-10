@@ -1,6 +1,8 @@
 # rflx: one HDF5 file a step
 
-STATUS: a design for review, 9 October 2026. Nothing here is built yet.
+STATUS: agreed 9 October 2026. Built: HDF5 required; the library, src/rflx.cc,
+the tree, the tables and the file; mxi_convert; mxeq reading .rflx. Still to
+come: each program reading and writing .rflx.
 
 mxi's primary file format becomes `.rflx`: one HDF5 file holding the experiment
 list, the reflection table, or both, in the layout specified by dxtbx-h5

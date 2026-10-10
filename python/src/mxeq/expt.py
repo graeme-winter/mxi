@@ -252,5 +252,7 @@ def loads(text: str) -> ExperimentList:
 
 
 def load(path: str) -> ExperimentList:
-    with open(path) as f:
-        return loads(f.read())
+    """An .expt, or a .rflx's experiment list (mxeq.rflx)."""
+    from mxeq import rflx
+
+    return loads(json.dumps(rflx.experiments_dict(path)))
