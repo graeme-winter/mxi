@@ -39,6 +39,12 @@ public:
     buffer_.reserve(kFlushAt + 64);
   }
 
+  // Into memory instead, for a table read straight back by mxi's own reader
+  // into a .rflx (docs/rflx.md), where a file would only be written to be read.
+  explicit Out(std::string *sink) : path_("memory"), sink_(sink) {
+    buffer_.reserve(kFlushAt + 64);
+  }
+
   ~Out() {
     if (file_ != nullptr)
       std::fclose(file_);
@@ -58,6 +64,8 @@ public:
 
   void close() {
     flush();
+    if (sink_ != nullptr)
+      return;
     if (std::fclose(file_) != 0) {
       file_ = nullptr;
       throw std::runtime_error("cannot finish writing " + path_);
@@ -71,6 +79,11 @@ private:
   void flush() {
     if (buffer_.empty())
       return;
+    if (sink_ != nullptr) {
+      sink_->append(buffer_.data(), buffer_.size());
+      buffer_.clear();
+      return;
+    }
     const std::size_t written =
         std::fwrite(buffer_.data(), 1, buffer_.size(), file_);
     if (written != buffer_.size())
@@ -79,6 +92,7 @@ private:
   }
 
   std::string path_;
+  std::string *sink_ = nullptr;
   std::FILE *file_ = nullptr;
   std::vector<char> buffer_;
 };
@@ -232,8 +246,9 @@ void write(const std::string &path, const std::vector<dials_spots::Spot> &spots,
   write_parts(path, {part}, options);
 }
 
-void write_parts(const std::string &path, const std::vector<Part> &parts,
-                 const Options &options) {
+namespace {
+void write_into(Out &out, const std::vector<Part> &parts,
+                const Options &options) {
   check_platform();
   std::size_t rows = 0;
   for (const Part &part : parts) {
@@ -241,7 +256,6 @@ void write_parts(const std::string &path, const std::vector<Part> &parts,
       throw std::runtime_error("refl: a frame width of zero");
     rows += part.spots->size();
   }
-  Out out(path);
 
   put_array(out, 3);
   put_str(out, "dials::af::reflection_table");
@@ -382,6 +396,21 @@ void write_parts(const std::string &path, const std::vector<Part> &parts,
   });
 
   out.close();
+}
+} // namespace
+
+void write_parts(const std::string &path, const std::vector<Part> &parts,
+                 const Options &options) {
+  Out out(path);
+  write_into(out, parts, options);
+}
+
+std::string encode_parts(const std::vector<Part> &parts,
+                         const Options &options) {
+  std::string bytes;
+  Out out(&bytes);
+  write_into(out, parts, options);
+  return bytes;
 }
 
 } // namespace refl

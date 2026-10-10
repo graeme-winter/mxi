@@ -483,7 +483,10 @@ Table read_reflections(const std::string &path) {
                       std::to_string(size) + " bytes");
     }
   }
+  return decode_reflections(raw);
+}
 
+Table decode_reflections(const std::string &raw) {
   Reader r(reinterpret_cast<const std::uint8_t *>(raw.data()), raw.size());
   const std::size_t top = r.array_header();
   if (top != 2 && top != 3) {

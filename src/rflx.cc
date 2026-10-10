@@ -675,8 +675,16 @@ hid_t native_for(const std::string &type) {
   return H5Tcopy(H5T_NATIVE_DOUBLE);
 }
 
-// A dataset's creation properties: gzip at level 1 with the shuffle filter for
-// 256 elements or more, as dxtbx-h5 writes (HANDOVER 3.3), chunked by rows.
+// Whether this write compresses: set by write() for its call, under the lock.
+// Not for the programs' own files, which are read by the next step and gone:
+// gzip on one thread cost the 16M sweep's chain half again its time, 36 s to
+// 54, and HDF5 uncompressed writes as fast as msgpack. mxi_convert compresses,
+// for files kept or sent (docs/rflx.md).
+bool g_compress = false;
+
+// A dataset's creation properties: when compressing, gzip at level 1 with the
+// shuffle filter for 256 elements or more, as dxtbx-h5 writes (HANDOVER 3.3),
+// chunked by rows; otherwise contiguous, HDF5's fastest to write and read.
 hid_t creation(const std::vector<hsize_t> &dims) {
   std::size_t n = 1, row = 1;
   for (std::size_t k = 0; k < dims.size(); ++k) {
@@ -685,7 +693,7 @@ hid_t creation(const std::vector<hsize_t> &dims) {
       row *= static_cast<std::size_t>(dims[k]);
   }
   const hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
-  if (n >= 256) {
+  if (g_compress && n >= 256) {
     std::vector<hsize_t> chunk = dims;
     const std::size_t rows =
         std::max<std::size_t>(1, 65536 / std::max<std::size_t>(row, 1));
@@ -1176,9 +1184,14 @@ std::optional<Table> read_reflections(const std::string &path,
 }
 
 void write(const std::string &path, const json::Value *experiments,
-           const Table *reflections, const std::string &creator) {
+           const Table *reflections, const std::string &creator,
+           bool compress) {
   const std::lock_guard<std::mutex> guard(lock());
   const Quiet quiet;
+  struct Setting {
+    explicit Setting(bool on) { g_compress = on; }
+    ~Setting() { g_compress = false; }
+  } setting(compress);
   const std::string partial = path + ".part";
   {
     H file(H5Fcreate(partial.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT),

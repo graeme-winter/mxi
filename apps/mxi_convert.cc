@@ -36,7 +36,10 @@ const char *kUsage =
     "                         input's name as .rflx); from a .rflx, a .rflx\n"
     "                         rewritten\n"
     "  --output-expt PATH     from a .rflx, the .expt (its name as .expt)\n"
-    "  --output-refl PATH     from a .rflx, the .refl (its name as .refl)\n";
+    "  --output-refl PATH     from a .rflx, the .refl (its name as .refl)\n"
+    "  --no-compress          a .rflx written uncompressed, as the programs\n"
+    "                         write theirs; by default gzip and shuffle, as\n"
+    "                         dxtbx-h5 writes, for a file kept or sent\n";
 
 std::string with_extension(const std::string &path, const std::string &ext) {
   return std::filesystem::path(path).replace_extension(ext).string();
@@ -53,8 +56,9 @@ int main(int argc, char **argv) {
   using namespace mxi;
   if (!only_asks_for_help(argc, argv))
     mirror_to_log("mxi_convert.log");
-  const std::set<std::string> known = {"-o", "--output", "--output-expt",
-                                       "--output-refl", "--help"};
+  const std::set<std::string> known = {
+      "-o",    "--output", "--output-expt", "--output-refl", "--no-compress",
+      "--help"};
   const std::set<std::string> takes_value = {"-o", "--output", "--output-expt",
                                              "--output-refl"};
   const Arguments args = parse_arguments(argc, argv, known, takes_value);
@@ -69,6 +73,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   const std::string output = args.value("-o", args.value("--output", ""));
+  const bool compress = !args.has("--no-compress");
   try {
     std::vector<std::string> hdf5, other;
     for (const std::string &p : args.positional)
@@ -99,7 +104,8 @@ int main(int argc, char **argv) {
       }
       if (!output.empty() && ends_with(output, ".rflx")) {
         rflx::write(output, experiments ? &*experiments : nullptr,
-                    reflections ? &*reflections : nullptr, "mxi_convert");
+                    reflections ? &*reflections : nullptr, "mxi_convert",
+                    compress);
         std::printf("Wrote %s\n", output.c_str());
         return 0;
       }
@@ -143,7 +149,7 @@ int main(int argc, char **argv) {
     const std::string out =
         output.empty() ? with_extension(other.front(), ".rflx") : output;
     rflx::write(out, experiments ? &*experiments : nullptr,
-                reflections ? &*reflections : nullptr, "mxi_convert");
+                reflections ? &*reflections : nullptr, "mxi_convert", compress);
     std::printf("Wrote %s%s%s\n", out.c_str(),
                 experiments ? ": the experiment list" : ":",
                 reflections ? (", " + std::to_string(reflections->nrows) +

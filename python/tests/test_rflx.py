@@ -349,3 +349,36 @@ def test_mxi_integrate_writes_a_rflx_of_what_it_writes_as_the_pair(tmp_path):
         and not (tmp_path / "integrated.rflx.refl").exists()
     )
     same_pair(tmp_path, ("pair.expt", "pair.refl"), split(tmp_path, "integrated.rflx"))
+
+
+@needs
+@pytest.mark.skipif(
+    not (SCALE and SCALE_EXPT and SCALE_REFL),
+    reason="set MXI_SCALE, MXI_SCALE_EXPT, MXI_SCALE_REFL",
+)
+def test_the_programs_write_uncompressed_and_mxi_convert_compresses(tmp_path):
+    # gzip on one thread made the 16M sweep's chain half again as long, 36 s to
+    # 54: the programs' own files, read by the next step, are not compressed;
+    # mxi_convert's, kept or sent, are, unless told not to (docs/rflx.md).
+    r = subprocess.run(
+        [SCALE, SCALE_EXPT, SCALE_REFL], capture_output=True, text=True, cwd=tmp_path
+    )
+    assert r.returncode == 0, r.stderr
+    convert(tmp_path, "scaled.rflx", "-o", "kept.rflx")
+    convert(tmp_path, "scaled.rflx", "-o", "plain.rflx", "--no-compress")
+
+    def filters(name):
+        with h5py.File(tmp_path / name, "r") as f:
+            group = f["reflections/0"]
+            return {
+                group[k].compression
+                for k in group
+                if isinstance(group[k], h5py.Dataset) and group[k].size >= 256
+            }
+
+    assert filters("scaled.rflx") == {None}
+    assert filters("plain.rflx") == {None}
+    assert filters("kept.rflx") == {"gzip"}
+    same_table(
+        refl.load(str(tmp_path / "kept.rflx")), refl.load(str(tmp_path / "scaled.rflx"))
+    )

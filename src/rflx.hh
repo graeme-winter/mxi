@@ -80,8 +80,12 @@ std::string describe(const Outputs &out, bool experiments = true,
 //: `creator` names the program, for the root attribute of that name. Every
 //: column of the table is written, or the write refused: a column of a type
 //: the format has no place for is named in the error.
+//: `compress`: gzip and shuffle, as dxtbx-h5 writes, for files kept or sent
+//: -- mxi_convert's; not for the programs' own, where on one thread it cost
+//: more than the work it saved (docs/rflx.md).
 void write(const std::string &path, const json::Value *experiments,
-           const Table *reflections, const std::string &creator);
+           const Table *reflections, const std::string &creator,
+           bool compress = false);
 
 } // namespace rflx
 } // namespace mxi

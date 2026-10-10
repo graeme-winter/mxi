@@ -5,7 +5,8 @@ src/rflx.cc -- the tree, the tables and the file; mxi_convert; mxeq reading
 .rflx; every program reading it, and writing it unless told the pair. On the
 insulin sweep the chain from images to MTZ on .rflx alone writes, step by step,
 exactly what the pair chain writes, and the same MTZ but for the time it was
-written.
+written; uncompressed and written directly, each step takes the pair chain's
+time to within the noise.
 
 mxi's primary file format becomes `.rflx`: one HDF5 file holding the experiment
 list, the reflection table, or both, in the layout specified by dxtbx-h5
@@ -64,9 +65,13 @@ checklist (its section 8) as reader and writer. The points mxi depends on:
   now -- several sweeps in one table. Written by every program that has
   reflections: all but mxi_import.
 * `dials_type` on every column, which the format allows and a reader may use.
-* Compression as dxtbx-h5's: gzip at level 1 with the shuffle filter, for
-  columns of 256 elements or more. gzip is in every HDF5; LZ4 needs a plugin,
-  which is why mxi does not write it.
+* No compression in the programs' own files, read by the next step: gzip on one
+  thread made Graeme's benchmark, the 16M sweep from images to scaled data,
+  half again as long, 36 s to 54, and uncompressed HDF5 writes as fast as
+  msgpack (strong.refl's 14.7 MB in 0.07 s; gzip took 0.17 s for 2.1 MB).
+  mxi_convert compresses, for files kept or sent, as dxtbx-h5 writes -- gzip at
+  level 1 and shuffle from 256 elements, which every HDF5 reads, where LZ4
+  needs a plugin -- unless told `--no-compress`.
 * Nothing under `/dials`, and no `/images` links.
 
 ### What mxi reads
@@ -95,13 +100,15 @@ DIALS pair when given, any half not named under its old default name. So a
 script naming its outputs writes what it always wrote: Graeme's chain scripts
 need no change. mxi_import's `-o` naming an `.expt` writes JSON, as before.
 
-Two programs write the pair and join it: mxi_find writes its table, with the
-spot finder's own writer, beside the `.rflx` as `strong.rflx.refl`, then joins
-it with the experiment list it was given -- none, given only a master, and then
-the `.rflx` holds the spots alone -- and removes it. mxi_integrate, whose runs
-call it again for each sweep and for post-refinement, each writing the pair,
-writes the pair beside the `.rflx`, `integrated.rflx.expt` and `.refl`, joins
-them at the end and removes them; a failure leaves neither.
+Every program writes its `.rflx` directly, with no file written only to be
+read again -- as the first versions of these two did, at a cost Graeme had
+noticed. mxi_find encodes its table with the spot finder's own writer into
+memory, reads it back as a file's would be, and writes it into the `.rflx` with
+the experiment list it was given -- none, given only a master, and then the
+`.rflx` holds the spots alone. mxi_integrate's final write, of one sweep, of
+several joined, or of the second run after post-refinement, goes to the
+`.rflx`; only its intermediate files -- each sweep's run, the first run and the
+post-refined models before the second -- are pairs, beside the result, removed.
 
 So the chain becomes
 
@@ -160,8 +167,10 @@ Then mxi_convert; then each program's input, then its output; then mxeq.
 
 ## Open questions
 
-1. **Compression**: gzip level 1 and shuffle, as dxtbx-h5, or none for
-   intermediate files, if the cost on a large table says so.
+1. **Compression**: settled, October 2026 -- none in the programs' files,
+   gzip in mxi_convert's (above). Parallel gzip, compressing chunks on every
+   core and writing them direct, could make a compressed default cheap, if disk
+   ever matters more.
 2. **Masks, gain and pedestal**, which dxtbx stores as absolute paths: kept as
    paths, as dxtbx-h5 keeps them for now, so a `.rflx` moved away from its masks
    loses them, as an `.expt` does.

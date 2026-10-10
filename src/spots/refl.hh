@@ -91,6 +91,11 @@ struct Part {
 void write_parts(const std::string &path, const std::vector<Part> &parts,
                  const Options &options);
 
+// The same table's bytes, in memory: for mxi_find writing a .rflx, which reads
+// them straight back into a table rather than through a file.
+std::string encode_parts(const std::vector<Part> &parts,
+                         const Options &options);
+
 } // namespace refl
 
 #endif // SPOTFINDER_REFL_HH

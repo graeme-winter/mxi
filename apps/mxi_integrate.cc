@@ -267,10 +267,13 @@ int run_program(int argc, char **argv);
 // the second run reads them as any later program would.
 int integrate_with_postrefinement(const Arguments &args, const char *program,
                                   const std::set<std::string> &takes_value) {
-  const std::string out_refl = args.value("-o", "integrated.refl");
-  const std::string out_expt = args.value("--output-expt", "integrated.expt");
-  const std::string first_refl = out_refl + ".before-postrefinement.refl";
-  const std::string first_expt = out_expt + ".before-postrefinement.expt";
+  // The result where the user asked (docs/rflx.md); the first run's, and the
+  // post-refined models between the two runs, beside it, removed at the end.
+  const rflx::Outputs outputs = rflx::outputs(args, "integrated");
+  const std::string base = outputs.rflx.empty() ? outputs.refl : outputs.rflx;
+  const std::string first_refl = base + ".before-postrefinement.refl";
+  const std::string first_expt = base + ".before-postrefinement.expt";
+  const std::string post_expt = base + ".postrefined.expt";
   std::size_t points = 0;
   if (args.has("--postrefine-points")) {
     const double n = args.number("--postrefine-points", 0.0);
@@ -285,8 +288,7 @@ int integrate_with_postrefinement(const Arguments &args, const char *program,
   // A command line for one run: this one's options, less those that belong to
   // the post-refinement, with its own models and output. The first run keeps no
   // shoeboxes or profiles, since only the second run's are the result.
-  const auto command = [&](const std::string &expt, const std::string &refl,
-                           bool first) {
+  const auto command = [&](const std::string &expt, bool first) {
     std::vector<std::string> words = {program, expt};
     if (args.positional.size() == 2)
       words.push_back(args.positional[1]);
@@ -300,13 +302,18 @@ int integrate_with_postrefinement(const Arguments &args, const char *program,
       if (takes_value.count(flag))
         words.push_back(value);
     }
-    words.push_back("-o");
-    words.push_back(refl);
-    // Every run writes its models: the first to a file of its own, removed
-    // with its reflections; the second to --output-expt, over the post-refined
-    // models it read, now with the profile model it used.
-    words.push_back("--output-expt");
-    words.push_back(first ? first_expt : out_expt);
+    // The first run writes the pair beside the result, removed; the second the
+    // result, as asked: the .rflx, or the pair -- its models now carrying the
+    // profile model it used.
+    if (first) {
+      words.insert(words.end(),
+                   {"-o", first_refl, "--output-expt", first_expt});
+    } else if (!outputs.rflx.empty()) {
+      words.insert(words.end(), {"-o", outputs.rflx});
+    } else {
+      words.insert(words.end(),
+                   {"-o", outputs.refl, "--output-expt", outputs.expt});
+    }
     return words;
   };
   const auto run = [](std::vector<std::string> words) {
@@ -320,7 +327,7 @@ int integrate_with_postrefinement(const Arguments &args, const char *program,
   std::printf("Integrating with the models as given, then refining against the "
               "centres that measures, then integrating again\n\n");
   std::printf("=== Integration with the models as given ===\n");
-  int status = run(command(args.positional[0], first_refl, true));
+  int status = run(command(args.positional[0], true));
   if (status != 0)
     return status;
 
@@ -354,19 +361,22 @@ int integrate_with_postrefinement(const Arguments &args, const char *program,
           sv.n_parameters, sv.n_used, sv.rmsd_x, sv.rmsd_y, sv.rmsd_z,
           experiments[0].crystal ? experiments[0].crystal->A_points.size() : 0);
     }
-    write_experiments(out_expt, experiments);
-    std::printf("Wrote the post-refined models to %s\n\n", out_expt.c_str());
+    write_experiments(post_expt, experiments);
+    std::printf("Post-refined models written for the second integration\n\n");
   } catch (const std::exception &error) {
     std::fprintf(stderr, "mxi_integrate: post-refinement: %s\n", error.what());
     std::remove(first_refl.c_str());
     std::remove(first_expt.c_str());
+    std::remove(post_expt.c_str());
     return 1;
   }
   std::remove(first_refl.c_str());
   std::remove(first_expt.c_str());
 
   std::printf("=== Integration with the post-refined models ===\n");
-  return run(command(out_expt, out_refl, false));
+  status = run(command(post_expt, false));
+  std::remove(post_expt.c_str());
+  return status;
 }
 
 // Several sweeps, as DIALS integrates them: each experiment alone -- a list of
@@ -390,8 +400,10 @@ int integrate_several(const Arguments &args, const char *program,
                          path.substr(dot)
                    : path + "_" + std::to_string(sweep);
   };
-  const std::string out_refl = args.value("-o", "integrated.refl");
-  const std::string out_expt = args.value("--output-expt", "integrated.expt");
+  // The result where the user asked (docs/rflx.md); each sweep's files beside
+  // it, removed at the end.
+  const rflx::Outputs outputs = rflx::outputs(args, "integrated");
+  const std::string base = outputs.rflx.empty() ? outputs.refl : outputs.rflx;
   const json::Array &experiments =
       document.as_object().at("experiment").as_array();
   const std::size_t n = experiments.size();
@@ -426,7 +438,7 @@ int integrate_several(const Arguments &args, const char *program,
     std::vector<Table> tables;
     std::vector<json::Value> lists;
     for (std::size_t i = 0; i < n; ++i) {
-      const std::string stem = out_refl + ".sweep" + std::to_string(i);
+      const std::string stem = base + ".sweep" + std::to_string(i);
       const std::string in_expt = stem + ".in.expt";
       const std::string in_refl = stem + ".in.refl";
       const std::string got_refl = stem + ".refl";
@@ -496,7 +508,6 @@ int integrate_several(const Arguments &args, const char *program,
       lists.push_back(std::move(list));
     }
     const Table joined = concat_rows_with_shoeboxes(tables);
-    write_reflections(out_refl, joined);
     // One crystal, shared, if the sweeps came in sharing one and none changed
     // it -- as without --postrefine none does: each sweep's list carried a
     // copy, and DIALS writes it once. Postrefined, they may differ, and stay
@@ -509,14 +520,13 @@ int integrate_several(const Arguments &args, const char *program,
           x["crystal"].as_number() == experiments[0]["crystal"].as_number();
     if (shared)
       share_identical(&joined_expt, "crystal");
-    json::dump_file(out_expt, joined_expt);
+    rflx::write_outputs(outputs, &joined_expt, &joined, "mxi_integrate");
     tidy();
     std::printf("\n");
     for (std::size_t i = 0; i < n; ++i)
       std::printf("  sweep %zu: %zu reflections\n", i, tables[i].nrows);
-    std::printf("Wrote %zu reflections of %zu sweeps to %s, and the models to "
-                "%s\n",
-                joined.nrows, n, out_refl.c_str(), out_expt.c_str());
+    std::printf("Wrote %zu reflections of %zu sweeps, and the models, to %s\n",
+                joined.nrows, n, rflx::describe(outputs).c_str());
     return 0;
   } catch (const std::exception &error) {
     std::fprintf(stderr, "mxi_integrate: %s\n", error.what());
@@ -2147,24 +2157,23 @@ int run_program(int argc, char **argv) {
       }
     }
 
-    const std::string path = args.value("-o", "integrated.refl");
-    const double t_write_start = now_wall();
-    write_reflections(path, out);
-    t_write = now_wall() - t_write_start;
-    std::printf("Wrote %zu reflections to %s\n", planned.size(), path.c_str());
-    // And the models integrated with, carrying the profile model used -- what
-    // the next program reads: mxi_symmetry integrated.expt integrated.refl.
+    // The reflections, and the models integrated with, carrying the profile
+    // model used -- what the next program reads -- into the .rflx, or the pair
+    // if asked for (docs/rflx.md).
     {
+      const double t_write_start = now_wall();
       ExperimentList written = experiments;
       written.profile.present = true;
       written.profile.sigma_b = sigma_b;
       written.profile.sigma_m = sigma_m;
       written.profile.n_sigma = mask_options.n_sigma;
-      const std::string expt_path =
-          args.value("--output-expt", "integrated.expt");
-      write_experiments(expt_path, written);
-      std::printf("Wrote the models, with the profile model, to %s\n",
-                  expt_path.c_str());
+      const rflx::Outputs outputs = rflx::outputs(args, "integrated");
+      const json::Value document = experiments_to_json(written);
+      rflx::write_outputs(outputs, &document, &out, "mxi_integrate");
+      t_write = now_wall() - t_write_start;
+      std::printf("Wrote %zu reflections, and the models with the profile "
+                  "model, to %s\n",
+                  planned.size(), rflx::describe(outputs).c_str());
     }
 
     if (args.has("--timing")) {
@@ -2246,65 +2255,5 @@ int main(int argc, char **argv) {
   // dials.<program>.log; not for a run that only asks for help.
   if (!mxi::only_asks_for_help(argc, argv))
     mxi::mirror_to_log("mxi_integrate.log");
-  if (mxi::only_asks_for_help(argc, argv))
-    return mxi::run_program(argc, argv);
-
-  // Where to write (docs/rflx.md): the pair if named, as always; else one
-  // .rflx. The integration -- one sweep or several, post-refined or not, each
-  // run of it calling run_program again with its own outputs -- writes the
-  // pair, so for a .rflx it writes it under names beside the .rflx's, joined
-  // into the .rflx at the end and removed.
-  std::string o;
-  bool pair = false;
-  for (int i = 1; i < argc; ++i) {
-    const std::string w = argv[i];
-    if ((w == "-o" || w == "--output") && i + 1 < argc)
-      o = argv[i + 1];
-    if (w == "--output-expt" || w == "--output-refl")
-      pair = true;
-  }
-  const auto ends_with = [](const std::string &s, const std::string &t) {
-    return s.size() >= t.size() &&
-           s.compare(s.size() - t.size(), t.size(), t) == 0;
-  };
-  if (pair || (!o.empty() && !ends_with(o, ".rflx")))
-    return mxi::run_program(argc, argv);
-  const std::string rflx = o.empty() ? "integrated.rflx" : o;
-  const std::string half_expt = rflx + ".expt", half_refl = rflx + ".refl";
-  std::vector<std::string> words;
-  for (int i = 0; i < argc; ++i) {
-    const std::string w = argv[i];
-    if ((w == "-o" || w == "--output") && i + 1 < argc) {
-      ++i;
-      continue;
-    }
-    words.push_back(w);
-  }
-  for (const std::string &w :
-       {std::string("-o"), half_refl, std::string("--output-expt"), half_expt})
-    words.push_back(w);
-  std::vector<char *> args;
-  for (std::string &w : words)
-    args.push_back(w.data());
-  args.push_back(nullptr);
-  const int status =
-      mxi::run_program(static_cast<int>(words.size()), args.data());
-  if (status == 0) {
-    try {
-      const mxi::json::Value document =
-          mxi::read_experiment_document(half_expt);
-      const mxi::Table table = mxi::read_reflections(half_refl);
-      mxi::rflx::write(rflx, &document, &table, "mxi_integrate");
-      std::printf("Wrote %s\n", rflx.c_str());
-    } catch (const std::exception &e) {
-      std::fprintf(stderr, "mxi_integrate: writing %s: %s\n", rflx.c_str(),
-                   e.what());
-      std::remove(half_expt.c_str());
-      std::remove(half_refl.c_str());
-      return 1;
-    }
-  }
-  std::remove(half_expt.c_str());
-  std::remove(half_refl.c_str());
-  return status;
+  return mxi::run_program(argc, argv);
 }

@@ -159,6 +159,9 @@ private:
 };
 
 Table read_reflections(const std::string &path);
+//: A msgpack table already in memory, as read_reflections decodes a file's:
+//: for mxi_find, whose table goes into a .rflx without a file between.
+Table decode_reflections(const std::string &raw);
 
 //: The given rows of a table, in the order given, with every decoded column
 //: and the identifiers. Undecoded columns -- shoeboxes, and anything else kept

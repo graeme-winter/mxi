@@ -82,9 +82,8 @@ struct Options {
   std::size_t sweeps = 1;             // experiments in the list
   std::string experiments;            // -e: what dials.import wrote
   std::string output = "strong.refl"; // -o
-  // The .rflx to write (docs/rflx.md), the table written first beside it as
-  // output and joined with the experiment list into it at the end; empty when
-  // -o named a .refl, as before.
+  // The .rflx to write (docs/rflx.md), with the experiment list given if one
+  // was; empty when -o named a .refl, written then as before.
   std::string rflx;
   bool output_named = false;
   bool gpu = false;
@@ -623,25 +622,27 @@ void reconcile(const expt::Info &experiments, const series::Info &series,
 
 } // namespace
 
+// The table written: to its .refl, or -- for a .rflx (docs/rflx.md) -- encoded
+// in memory, read back as mxi's reader reads a file, and written into the
+// .rflx with the experiment list given, if one was: no file written only to be
+// read again. Throws as the writers do.
+void write_table(const Options &options, const std::vector<refl::Part> &parts,
+                 const refl::Options &writing) {
+  if (options.rflx.empty()) {
+    refl::write_parts(options.output, parts, writing);
+    return;
+  }
+  const mxi::Table table =
+      mxi::decode_reflections(refl::encode_parts(parts, writing));
+  std::optional<mxi::json::Value> document;
+  if (!options.experiments.empty())
+    document = mxi::read_experiment_document(options.experiments);
+  mxi::rflx::write(options.rflx, document ? &*document : nullptr, &table,
+                   "mxi_find");
+}
+
 // What was written, or that nothing was.
 void report_written(const Options &options, std::size_t rows) {
-  if (!options.rflx.empty()) {
-    // The table, and the experiment list if one was given, into the .rflx.
-    try {
-      std::optional<mxi::json::Value> document;
-      if (!options.experiments.empty())
-        document = mxi::read_experiment_document(options.experiments);
-      const mxi::Table table = mxi::read_reflections(options.output);
-      mxi::rflx::write(options.rflx, document ? &*document : nullptr, &table,
-                       "mxi_find");
-      std::remove(options.output.c_str());
-    } catch (const std::exception &e) {
-      std::fprintf(stderr, "mxi_find: writing %s: %s\n", options.rflx.c_str(),
-                   e.what());
-      std::remove(options.output.c_str());
-      std::exit(1);
-    }
-  }
   const std::string &written =
       options.rflx.empty() ? options.output : options.rflx;
   if (rows == 0) {
@@ -1164,8 +1165,13 @@ int write_one(const Options &options, const dials_spots::Labeller &labeller,
   writing.identifier = experiments.identifier;
   writing.shoeboxes = options.shoeboxes;
   try {
-    refl::write(options.output, labeller.spots(), labeller.pixels(),
-                static_cast<std::size_t>(info.width), writing);
+    refl::Part part;
+    part.spots = &labeller.spots();
+    part.pixels = &labeller.pixels();
+    part.width = static_cast<std::size_t>(info.width);
+    part.id = writing.id;
+    part.identifier = writing.identifier;
+    write_table(options, {part}, writing);
   } catch (const std::exception &error) {
     std::fprintf(stderr, "%s\n", error.what());
     return 1;
@@ -1189,10 +1195,8 @@ int main(int argc, char **argv) {
     const std::string &o = options.output;
     const bool named_rflx =
         o.size() >= 5 && o.compare(o.size() - 5, 5, ".rflx") == 0;
-    if (!options.output_named || named_rflx) {
+    if (!options.output_named || named_rflx)
       options.rflx = options.output_named ? o : "strong.rflx";
-      options.output = options.rflx + ".refl";
-    }
   }
   // The whole run's clock, from here, for --timing.
   mxi::Timing timing(options.timing);
@@ -1274,7 +1278,7 @@ int main(int argc, char **argv) {
   refl::Options writing;
   writing.shoeboxes = options.shoeboxes;
   try {
-    refl::write_parts(options.output, parts, writing);
+    write_table(options, parts, writing);
   } catch (const std::exception &error) {
     std::fprintf(stderr, "%s\n", error.what());
     return 1;
