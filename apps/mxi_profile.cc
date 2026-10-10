@@ -17,6 +17,7 @@
 #include "args.hh"
 #include "log_mirror.hh"
 #include "profile_model.hh"
+#include "rflx.hh"
 #include "shoebox.hh"
 #include "timing.hh"
 
@@ -50,7 +51,10 @@ int run_program(int argc, char **argv) {
                                        "--compare-sigma-m"};
   const std::set<std::string> takes_value = {
       "--n-sigma", "--min-zeta", "--compare-sigma-b", "--compare-sigma-m"};
-  const Arguments args = parse_arguments(argc, argv, known, takes_value);
+  Arguments args = parse_arguments(argc, argv, known, takes_value);
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   Timing timing(args.has("--timing"));
   double mark = Timing::now();
   if (args.help) {

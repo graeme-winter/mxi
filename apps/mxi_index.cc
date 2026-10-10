@@ -19,6 +19,7 @@
 #include "index.hh"
 #include "log_mirror.hh"
 #include "refine.hh"
+#include "rflx.hh"
 #include "timing.hh"
 
 namespace mxi {
@@ -73,7 +74,10 @@ int run_program(int argc, char **argv) {
       "--tolerance",   "--candidates",  "--output-expt",
       "--output-refl", "--macrocycles", "--jacobian-threads",
       "--fft-threads"};
-  const Arguments args = parse_arguments(argc, argv, known, takes_value);
+  Arguments args = parse_arguments(argc, argv, known, takes_value);
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   // 0 means one per core, 1 means none. Exposed because a threading change
   // that cannot be switched off cannot be measured against its absence.
   g_fft_threads = static_cast<std::size_t>(args.number("--fft-threads", 0.0));

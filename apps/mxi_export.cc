@@ -18,6 +18,7 @@
 #include "expt.hh"
 #include "log_mirror.hh"
 #include "refl.hh"
+#include "rflx.hh"
 
 namespace mxi {
 
@@ -216,7 +217,10 @@ int run_program(int argc, char **argv) {
   const std::set<std::string> known = {
       "-o",      "--output",       "--partiality-threshold", "--min-isigi",
       "--d-min", "--crystal-name", "--project-name"};
-  const Arguments args = parse_arguments(argc, argv, known, known);
+  Arguments args = parse_arguments(argc, argv, known, known);
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   if (args.help) {
     usage();
     return 0;

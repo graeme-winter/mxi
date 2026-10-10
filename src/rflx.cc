@@ -997,6 +997,21 @@ bool is_hdf5(const std::string &path) {
          std::memcmp(signature, "\x89HDF\r\n\x1a\n", 8) == 0;
 }
 
+bool has_experiments(const std::string &path) {
+  if (!is_hdf5(path))
+    return false;
+  const std::lock_guard<std::mutex> guard(lock());
+  const Quiet quiet;
+  H file(H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT), H5Fclose);
+  return file.ok() && is_group(file.id, "experiments");
+}
+
+std::vector<std::string> as_pair(const std::vector<std::string> &inputs) {
+  if (inputs.size() == 1 && is_hdf5(inputs[0]))
+    return {inputs[0], inputs[0]};
+  return inputs;
+}
+
 std::optional<json::Value> read_experiments(const std::string &path) {
   const std::lock_guard<std::mutex> guard(lock());
   const Quiet quiet;

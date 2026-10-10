@@ -15,6 +15,7 @@
 #include "log_mirror.hh"
 #include "parallel.hh"
 #include "refl.hh"
+#include "rflx.hh"
 #include "symmetry.hh"
 #include "timing.hh"
 
@@ -42,7 +43,10 @@ int run_program(int argc, char **argv) {
       "--max-delta", "--threads", "--output-expt", "--output-refl", "--timing"};
   std::set<std::string> takes_value = known;
   takes_value.erase("--timing");
-  const Arguments args = parse_arguments(argc, argv, known, takes_value);
+  Arguments args = parse_arguments(argc, argv, known, takes_value);
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   if (args.help) {
     usage();
     return 0;

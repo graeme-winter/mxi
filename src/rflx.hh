@@ -44,6 +44,14 @@ std::optional<Table>
 read_reflections(const std::string &path,
                  std::vector<std::string> *skipped = nullptr);
 
+//: Whether the file is a .rflx holding an experiment list: HDF5 with
+//: /experiments -- which an NXmx master, HDF5 with /entry, is not.
+bool has_experiments(const std::string &path);
+
+//: A program's inputs, the experiment list then the reflections: one .rflx
+//: standing for both, as the same path twice; anything else as it is.
+std::vector<std::string> as_pair(const std::vector<std::string> &inputs);
+
 //: Writes a .rflx holding either or both, replacing any file at `path`.
 //: `creator` names the program, for the root attribute of that name. Every
 //: column of the table is written, or the write refused: a column of a type

@@ -1,5 +1,7 @@
 #include "refl.hh"
 
+#include "rflx.hh"
+
 #include <bit>
 #include <cstring>
 #include <fstream>
@@ -450,6 +452,13 @@ void Table::validate() const {
 }
 
 Table read_reflections(const std::string &path) {
+  // A .rflx's reflections (docs/rflx.md), told by what the file is: HDF5.
+  if (rflx::is_hdf5(path)) {
+    std::optional<Table> table = rflx::read_reflections(path);
+    if (!table)
+      throw ReflError(path + " holds no reflections");
+    return std::move(*table);
+  }
   std::ifstream in(path, std::ios::binary);
   if (!in)
     throw ReflError("cannot open " + path);

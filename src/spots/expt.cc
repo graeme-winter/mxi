@@ -18,6 +18,7 @@
 
 #include <stdexcept>
 
+#include "../expt.hh"
 #include "../json.hh"
 
 namespace expt {
@@ -98,7 +99,7 @@ Info read(const std::string &path, std::size_t index) {
   Info info;
   mxi::json::Value document;
   try {
-    document = mxi::json::parse_file(path);
+    document = mxi::read_experiment_document(path);
   } catch (const std::exception &error) {
     throw std::runtime_error(error.what());
   }

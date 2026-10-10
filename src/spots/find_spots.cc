@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "../log_mirror.hh"
+#include "../rflx.hh"
 #include "../timing.hh"
 #include "decompress.hh"
 #include "dext.hh"
@@ -264,9 +265,12 @@ bool parse_options(int argc, char **argv, Options *options) {
       // made a script checking whether this is installed think it was broken.
       usage(argv[0], stdout);
       std::exit(0);
-    } else if (!flag.empty() && flag[0] != '-' && looks_like_json(flag)) {
+    } else if (!flag.empty() && flag[0] != '-' &&
+               (looks_like_json(flag) || mxi::rflx::has_experiments(flag))) {
       // An experiment list given as the argument, as dials.find_spots takes
-      // it: the images are then the ones its imageset names, as with -e.
+      // it: the images are then the ones its imageset names, as with -e. An
+      // .expt, or a .rflx holding one (docs/rflx.md) -- HDF5, as a master is,
+      // but with /experiments where a master has /entry.
       if (!options->experiments.empty()) {
         std::fprintf(stderr, "%s: two experiment lists, %s and %s\n", argv[0],
                      options->experiments.c_str(), flag.c_str());

@@ -15,6 +15,7 @@
 #include "log_mirror.hh"
 #include "postrefine.hh"
 #include "refine.hh"
+#include "rflx.hh"
 #include "timing.hh"
 #include <algorithm>
 #include <vector>
@@ -176,8 +177,11 @@ int run_program(int argc, char **argv) {
       "--macrocycles",      "--outlier-sigma", "--output-expt",
       "--output-refl",      "--z-weight",      "--min-volume",
       "--jacobian-threads", "--normal-threads"};
-  const Arguments args =
+  Arguments args =
       parse_arguments(argc, argv, known, takes_value, {"--scan-varying"});
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   // 0 means one per core, 1 means none. Exposed because a threading change
   // that cannot be switched off cannot be measured against its absence.
   g_normal_threads =

@@ -1,5 +1,7 @@
 #include "expt.hh"
 
+#include "rflx.hh"
+
 #include <cmath>
 #include <map>
 
@@ -269,8 +271,18 @@ ExperimentList experiments_from_json(const json::Value &document) {
   return list;
 }
 
+json::Value read_experiment_document(const std::string &path) {
+  if (rflx::is_hdf5(path)) {
+    std::optional<json::Value> tree = rflx::read_experiments(path);
+    if (!tree)
+      throw std::runtime_error(path + " holds no experiment list");
+    return std::move(*tree);
+  }
+  return json::parse_file(path);
+}
+
 ExperimentList read_experiments(const std::string &path) {
-  return experiments_from_json(json::parse_file(path));
+  return experiments_from_json(read_experiment_document(path));
 }
 
 namespace {

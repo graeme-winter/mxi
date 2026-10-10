@@ -150,3 +150,70 @@ def test_a_file_dxtbx_h5_wrote_is_read_to_the_json_it_was_written_from(tmp_path)
         encoding.encode_dict(f.create_group("experiments"), original)
     convert(tmp_path, "theirs.rflx")
     strictly_equal(json.load(open(tmp_path / "theirs.expt")), original)
+
+
+SCALE = os.environ.get("MXI_SCALE")
+SCALE_EXPT = os.environ.get("MXI_SCALE_EXPT")
+SCALE_REFL = os.environ.get("MXI_SCALE_REFL")
+
+
+def without_identifiers(path):
+    d = json.load(open(path))
+    d.pop("history", None)
+    for e in d.get("experiment", []):
+        e.pop("identifier", None)
+    return d
+
+
+@needs
+@pytest.mark.skipif(
+    not (SCALE and SCALE_EXPT and SCALE_REFL),
+    reason="set MXI_SCALE, MXI_SCALE_EXPT, MXI_SCALE_REFL",
+)
+def test_a_program_given_one_rflx_writes_what_it_writes_given_the_pair(tmp_path):
+    # One .rflx standing for both (rflx::as_pair), read by read_experiments and
+    # read_reflections as the pair is: the same output.
+    convert(tmp_path, SCALE_EXPT, SCALE_REFL, "-o", "in.rflx")
+    for name, inputs in (("pair", [SCALE_EXPT, SCALE_REFL]), ("rflx", ["in.rflx"])):
+        r = subprocess.run(
+            [SCALE, *inputs, "-o", f"{name}.refl", "--output-expt", f"{name}.expt"],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert r.returncode == 0, r.stderr
+    assert (tmp_path / "pair.refl").read_bytes() == (
+        tmp_path / "rflx.refl"
+    ).read_bytes()
+    assert without_identifiers(tmp_path / "pair.expt") == without_identifiers(
+        tmp_path / "rflx.expt"
+    )
+
+
+@needs
+@pytest.mark.skipif(not FIND, reason="set MXI_FIND")
+def test_mxi_find_takes_a_rflx_experiment_list_not_for_a_master(tmp_path):
+    # HDF5 both, a .rflx has /experiments where a master has /entry. The
+    # planted series of mxeq.fixtures.nxmx, with the experiment list it writes.
+    pytest.importorskip("hdf5plugin")
+    import sys
+
+    subprocess.run(
+        [sys.executable, "-m", "mxeq.fixtures.nxmx", str(tmp_path / "s"), "6"],
+        check=True,
+        capture_output=True,
+    )
+    convert(tmp_path, "s/series.expt", "-o", "series.rflx")
+    for name, given in (("expt", "s/series.expt"), ("rflx", "series.rflx")):
+        # Its list names no images, so the master is named as well -- and
+        # the .rflx must still be taken as the list, not as a second master.
+        r = subprocess.run(
+            [FIND, given, "-x", "s/series.nxs", "-o", f"{name}.refl"],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert r.returncode == 0, r.stderr
+    assert (tmp_path / "expt.refl").read_bytes() == (
+        tmp_path / "rflx.refl"
+    ).read_bytes()

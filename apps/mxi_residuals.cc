@@ -29,6 +29,7 @@
 #include "args.hh"
 #include "linalg.hh"
 #include "log_mirror.hh"
+#include "rflx.hh"
 #include "timing.hh"
 
 namespace mxi {
@@ -55,7 +56,10 @@ int run_program(int argc, char **argv) {
                                        "--modules"};
   std::set<std::string> takes_value = known;
   takes_value.erase("--timing");
-  const Arguments args = parse_arguments(argc, argv, known, takes_value);
+  Arguments args = parse_arguments(argc, argv, known, takes_value);
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   Timing timing(args.has("--timing"));
   double mark = Timing::now();
   if (args.help) {

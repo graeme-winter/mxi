@@ -48,6 +48,7 @@
 #include "timing.hh"
 
 #include "decompress.hh"
+#include "rflx.hh"
 #include "series.hh"
 
 #include <memory>
@@ -476,7 +477,7 @@ int integrate_several(const Arguments &args, const char *program,
       // renumbers it: the image sets of the sweeps before, plus its own in
       // its list of one. The sweep's run wrote 0, its list's; left so, every
       // sweep's spots fall on the first image set in dials.image_viewer.
-      json::Value list = json::parse_file(got_expt);
+      json::Value list = read_experiment_document(got_expt);
       std::int64_t imageset = 0;
       for (const json::Value &earlier : lists)
         imageset +=
@@ -565,7 +566,10 @@ int run_program(int argc, char **argv) {
   takes_value.erase("--gpu");
   takes_value.erase("--gpu-emulate");
   takes_value.erase("--postrefine");
-  const Arguments args = parse_arguments(argc, argv, known, takes_value);
+  Arguments args = parse_arguments(argc, argv, known, takes_value);
+  // One .rflx stands for the experiment list and the reflections
+  // (docs/rflx.md).
+  args.positional = rflx::as_pair(args.positional);
   if (args.help) {
     usage(argv[0]);
     return 0;
@@ -588,7 +592,7 @@ int run_program(int argc, char **argv) {
   {
     json::Value document;
     try {
-      document = json::parse_file(args.positional[0]);
+      document = read_experiment_document(args.positional[0]);
     } catch (const std::exception &) {
       // Read again below, where a bad file is reported as it always was.
     }

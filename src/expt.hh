@@ -92,6 +92,9 @@ struct ExperimentList {
   }
 };
 
+//: The experiment list's JSON tree, from an .expt or a .rflx's /experiments
+//: (docs/rflx.md), told by what the file is; a .rflx without one refused.
+json::Value read_experiment_document(const std::string &path);
 ExperimentList read_experiments(const std::string &path);
 ExperimentList experiments_from_json(const json::Value &document);
 
