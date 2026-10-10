@@ -13,6 +13,7 @@
 #include "json.hh"
 #include "log_mirror.hh"
 #include "nxmx_import.hh"
+#include "rflx.hh"
 
 namespace {
 
@@ -23,7 +24,9 @@ const char *kUsage =
     "  NXmx HDF5 master files, as dials.import writes it: one experiment a\n"
     "  master, each sweep with models of its own. The options apply to every\n"
     "  master alike.\n"
-    "  -o, --output PATH     where to write it (imported.expt)\n"
+    "  -o, --output PATH     where to write it: a .rflx (imported.rflx), or "
+    "an\n"
+    "                        .expt, JSON, as dials.import writes it\n"
     "  --wavelength A        the wavelength, for a file without or with a "
     "wrong one\n"
     "  --distance MM         the detector distance, along the panel's normal\n"
@@ -154,8 +157,7 @@ int main(int argc, char **argv) {
       o.image_range =
           std::array<int, 2>{static_cast<int>(v[0]), static_cast<int>(v[1])};
     }
-    const std::string output =
-        args.value("--output", args.value("-o", "imported.expt"));
+    const rflx::Outputs out = rflx::outputs(args, "imported");
     // One experiment a master, each with models of its own, joined as
     // dials.import writes several sweeps; each described as it is read.
     std::vector<json::Value> lists;
@@ -164,10 +166,11 @@ int main(int argc, char **argv) {
       lists.push_back(import_nxmx(master, o, &notes));
       describe(master, lists.back(), notes);
     }
-    json::dump_file(output, join_experiment_lists(lists));
+    const json::Value document = join_experiment_lists(lists);
+    rflx::write_outputs(out, &document, nullptr, "mxi_import");
     if (lists.size() > 1)
       std::printf("%zu sweeps, one experiment each\n", lists.size());
-    std::printf("Wrote %s\n", output.c_str());
+    std::printf("Wrote %s\n", rflx::describe(out, true, false).c_str());
     return 0;
   } catch (const std::exception &ex) {
     std::fprintf(stderr, "mxi_import: %s\n", ex.what());

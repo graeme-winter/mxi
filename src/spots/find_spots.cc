@@ -40,12 +40,14 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include "../expt.hh"
 #include "../log_mirror.hh"
 #include "../rflx.hh"
 #include "../timing.hh"
@@ -80,6 +82,11 @@ struct Options {
   std::size_t sweeps = 1;             // experiments in the list
   std::string experiments;            // -e: what dials.import wrote
   std::string output = "strong.refl"; // -o
+  // The .rflx to write (docs/rflx.md), the table written first beside it as
+  // output and joined with the experiment list into it at the end; empty when
+  // -o named a .refl, as before.
+  std::string rflx;
+  bool output_named = false;
   bool gpu = false;
   bool gpu_force =
       false; // 32-bit frames narrowed to 16 bits, for a GPU of 16 only
@@ -116,7 +123,7 @@ void report_version(const char *program) {
 void usage(const char *program, std::FILE *to = stderr) {
   std::fprintf(
       to,
-      "usage: %s [-j threads] [-g|--gpu] [-e imported.expt] [-o strong.refl]\n"
+      "usage: %s [-j threads] [-g|--gpu] [-e imported.expt] [-o strong.rflx]\n"
       "       [options] [master.nxs | imported.expt]\n"
       "\n"
       "  imported.expt      an experiment list, as -e: the images are the "
@@ -128,7 +135,9 @@ void usage(const char *program, std::FILE *to = stderr) {
       "                     and -x overrides it if the data has moved.\n"
       "  -e imported.expt   what dials.import wrote, for the scan range, the\n"
       "                     panel size and the experiment identifier\n"
-      "  -o file            where to write the reflection table (strong.refl)\n"
+      "  -o file            where to write: a .rflx, with the experiment list\n"
+      "                     if one was given (strong.rflx), or a .refl, the\n"
+      "                     reflection table alone\n"
       "  -j threads         frames read and thresholded at once (every core)\n"
       "  --timing           where the time goes: each stage's time summed "
       "across\n"
@@ -225,6 +234,7 @@ bool parse_options(int argc, char **argv, Options *options) {
       options->experiments = argv[++i];
     } else if (flag == "-o" && has_value) {
       options->output = argv[++i];
+      options->output_named = true;
     } else if (flag == "-gpu") {
       // The old spelling, one dash for a long option: kept for scripts that
       // have it, for now, and said so.
@@ -615,18 +625,36 @@ void reconcile(const expt::Info &experiments, const series::Info &series,
 
 // What was written, or that nothing was.
 void report_written(const Options &options, std::size_t rows) {
+  if (!options.rflx.empty()) {
+    // The table, and the experiment list if one was given, into the .rflx.
+    try {
+      std::optional<mxi::json::Value> document;
+      if (!options.experiments.empty())
+        document = mxi::read_experiment_document(options.experiments);
+      const mxi::Table table = mxi::read_reflections(options.output);
+      mxi::rflx::write(options.rflx, document ? &*document : nullptr, &table,
+                       "mxi_find");
+      std::remove(options.output.c_str());
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "mxi_find: writing %s: %s\n", options.rflx.c_str(),
+                   e.what());
+      std::remove(options.output.c_str());
+      std::exit(1);
+    }
+  }
+  const std::string &written =
+      options.rflx.empty() ? options.output : options.rflx;
   if (rows == 0) {
     std::fprintf(stderr,
                  "No reflections found; %s is a well formed table with no rows "
                  "in it, which dials.index will refuse\n",
-                 options.output.c_str());
+                 written.c_str());
     return;
   }
   std::error_code ignored;
-  const std::uintmax_t bytes =
-      std::filesystem::file_size(options.output, ignored);
+  const std::uintmax_t bytes = std::filesystem::file_size(written, ignored);
   std::fprintf(stdout, "Wrote %zu reflections to %s (%.1f MB%s)\n", rows,
-               options.output.c_str(), static_cast<double>(bytes) / 1e6,
+               written.c_str(), static_cast<double>(bytes) / 1e6,
                options.shoeboxes ? ", most of it shoeboxes" : "");
 }
 
@@ -1156,6 +1184,16 @@ int main(int argc, char **argv) {
   Options options;
   if (!parse_options(argc, argv, &options))
     return 2;
+  // Nothing named, or a .rflx: one .rflx, its table written beside it first.
+  {
+    const std::string &o = options.output;
+    const bool named_rflx =
+        o.size() >= 5 && o.compare(o.size() - 5, 5, ".rflx") == 0;
+    if (!options.output_named || named_rflx) {
+      options.rflx = options.output_named ? o : "strong.rflx";
+      options.output = options.rflx + ".refl";
+    }
+  }
   // The whole run's clock, from here, for --timing.
   mxi::Timing timing(options.timing);
 

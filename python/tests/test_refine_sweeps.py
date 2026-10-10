@@ -87,7 +87,17 @@ def halves(tmp_path, noise=0.0, wide_second=False, split=SPLIT):
 
 def refine(tmp_path, *extra):
     r = subprocess.run(
-        [BINARY, "two.expt", "two.refl", "--analytic", *extra],
+        [
+            BINARY,
+            "two.expt",
+            "two.refl",
+            "--analytic",
+            "--output-expt",
+            "refined.expt",
+            "--output-refl",
+            "refined.refl",
+            *extra,
+        ],
         capture_output=True,
         text=True,
         cwd=tmp_path,

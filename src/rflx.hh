@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "args.hh"
 #include "json.hh"
 #include "refl.hh"
 
@@ -51,6 +52,29 @@ bool has_experiments(const std::string &path);
 //: A program's inputs, the experiment list then the reflections: one .rflx
 //: standing for both, as the same path twice; anything else as it is.
 std::vector<std::string> as_pair(const std::vector<std::string> &inputs);
+
+//: Where a program writes (docs/rflx.md): one .rflx, or the DIALS pair.
+//: Nothing named: <step>.rflx. -o or --output by its extension -- .rflx that
+//: file; .expt or .json the experiment list; anything else, .refl, the
+//: reflections -- and --output-expt, --output-refl: the pair, any half not
+//: named under its old default, <step>.expt or <step>.refl, so that a script
+//: naming its outputs writes what it always wrote.
+struct Outputs {
+  std::string rflx; //: the .rflx, or empty
+  std::string expt; //: the pair's halves, or empty
+  std::string refl;
+};
+Outputs outputs(const Arguments &args, const std::string &step);
+
+//: Writes them: into the .rflx, or the pair as the programs always wrote it --
+//: the experiment list as JSON, the reflections as msgpack. Either half may be
+//: absent, as for mxi_import's experiments alone.
+void write_outputs(const Outputs &out, const json::Value *experiments,
+                   const Table *reflections, const std::string &creator);
+
+//: "indexed.rflx", or "indexed.expt and indexed.refl": for "Wrote ...".
+std::string describe(const Outputs &out, bool experiments = true,
+                     bool reflections = true);
 
 //: Writes a .rflx holding either or both, replacing any file at `path`.
 //: `creator` names the program, for the root attribute of that name. Every

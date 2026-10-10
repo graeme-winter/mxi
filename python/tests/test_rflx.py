@@ -217,3 +217,135 @@ def test_mxi_find_takes_a_rflx_experiment_list_not_for_a_master(tmp_path):
     assert (tmp_path / "expt.refl").read_bytes() == (
         tmp_path / "rflx.refl"
     ).read_bytes()
+
+
+# Writing (docs/rflx.md): nothing named, one .rflx named for the step; -o a
+# .rflx, that; --output-expt, --output-refl or -o a .refl, the pair, as always.
+
+INTEGRATE = os.environ.get("MXI_INTEGRATE")
+REFINED_EXPT = os.environ.get("MXI_POSTREFINE_EXPT")
+REFINED_REFL = os.environ.get("MXI_POSTREFINE_REFL")
+
+
+def split(tmp_path, name):
+    """A .rflx's halves, through mxi_convert, for comparing with the pair."""
+    convert(
+        tmp_path,
+        name,
+        "--output-expt",
+        name + ".x.expt",
+        "--output-refl",
+        name + ".x.refl",
+    )
+    return name + ".x.expt", name + ".x.refl"
+
+
+def same_pair(tmp_path, a, b):
+    import msgpack
+
+    (ea, ra), (eb, rb) = a, b
+    assert without_identifiers(tmp_path / ea) == without_identifiers(tmp_path / eb)
+    ta = msgpack.unpackb((tmp_path / ra).read_bytes(), raw=False, strict_map_key=False)
+    tb = msgpack.unpackb((tmp_path / rb).read_bytes(), raw=False, strict_map_key=False)
+    assert ta[2] == tb[2]
+
+
+@needs
+@pytest.mark.skipif(
+    not (SCALE and SCALE_EXPT and SCALE_REFL),
+    reason="set MXI_SCALE, MXI_SCALE_EXPT, MXI_SCALE_REFL",
+)
+def test_a_program_writes_a_rflx_unless_told_the_pair(tmp_path):
+    def scale(*words):
+        r = subprocess.run(
+            [SCALE, SCALE_EXPT, SCALE_REFL, *words],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert r.returncode == 0, r.stderr
+
+    scale()
+    assert (tmp_path / "scaled.rflx").exists()
+    assert (
+        not (tmp_path / "scaled.expt").exists()
+        and not (tmp_path / "scaled.refl").exists()
+    )
+    scale("-o", "named.rflx")
+    assert (tmp_path / "named.rflx").exists()
+    scale("-o", "old.refl")  # -o a .refl: the pair, as mxi_scale always wrote it
+    assert (tmp_path / "old.refl").exists() and (tmp_path / "scaled.expt").exists()
+    same_pair(tmp_path, ("scaled.expt", "old.refl"), split(tmp_path, "scaled.rflx"))
+    same_pair(tmp_path, ("scaled.expt", "old.refl"), split(tmp_path, "named.rflx"))
+
+
+@needs
+@pytest.mark.skipif(not IMPORT, reason="set MXI_IMPORT")
+def test_mxi_import_writes_the_experiments_alone(tmp_path):
+    original = imported(tmp_path)  # -o imported.expt: JSON, as always
+    r = subprocess.run(
+        [IMPORT, "master.nxs"], capture_output=True, text=True, cwd=tmp_path
+    )
+    assert r.returncode == 0, r.stderr
+    # Two imports, so two fresh identifiers: compared without them.
+    ours = rflx.experiments_dict(str(tmp_path / "imported.rflx"))
+    for d in (ours, original):
+        d.pop("history", None)
+        for e in d["experiment"]:
+            e.pop("identifier", None)
+    strictly_equal(ours, original)
+    with h5py.File(tmp_path / "imported.rflx", "r") as f:
+        assert "reflections" not in f
+
+
+@needs
+@pytest.mark.skipif(not FIND, reason="set MXI_FIND")
+def test_mxi_find_writes_the_experiments_with_the_spots(tmp_path):
+    pytest.importorskip("hdf5plugin")
+    import sys
+
+    subprocess.run(
+        [sys.executable, "-m", "mxeq.fixtures.nxmx", str(tmp_path / "s"), "6"],
+        check=True,
+        capture_output=True,
+    )
+    for words in (["-o", "strong.refl"], []):
+        r = subprocess.run(
+            [FIND, "s/series.expt", "-x", "s/series.nxs", *words],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert r.returncode == 0, r.stderr
+    assert not (tmp_path / "strong.rflx.refl").exists()  # the table beside it, removed
+    strictly_equal(
+        rflx.experiments_dict(str(tmp_path / "strong.rflx")),
+        json.load(open(tmp_path / "s/series.expt")),
+    )
+    same_table(
+        refl.load(str(tmp_path / "strong.rflx")),
+        refl.load(str(tmp_path / "strong.refl")),
+    )
+
+
+@needs
+@pytest.mark.skipif(
+    not (INTEGRATE and REFINED_EXPT and REFINED_REFL),
+    reason="set MXI_INTEGRATE, MXI_POSTREFINE_EXPT, MXI_POSTREFINE_REFL",
+)
+def test_mxi_integrate_writes_a_rflx_of_what_it_writes_as_the_pair(tmp_path):
+    # Its runs -- one sweep or several, post-refined or not -- write the pair;
+    # for a .rflx, beside it, joined into it at the end and removed.
+    for words in (["-o", "pair.refl", "--output-expt", "pair.expt"], []):
+        r = subprocess.run(
+            [INTEGRATE, REFINED_EXPT, REFINED_REFL, "--threads", "2", *words],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert r.returncode == 0, r.stderr[-2000:]
+    assert (
+        not (tmp_path / "integrated.rflx.expt").exists()
+        and not (tmp_path / "integrated.rflx.refl").exists()
+    )
+    same_pair(tmp_path, ("pair.expt", "pair.refl"), split(tmp_path, "integrated.rflx"))

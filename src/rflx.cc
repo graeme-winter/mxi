@@ -1006,6 +1006,57 @@ bool has_experiments(const std::string &path) {
   return file.ok() && is_group(file.id, "experiments");
 }
 
+namespace {
+bool ends_with(const std::string &s, const std::string &tail) {
+  return s.size() >= tail.size() &&
+         s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+} // namespace
+
+Outputs outputs(const Arguments &args, const std::string &step) {
+  const std::string o = args.value("-o", args.value("--output", ""));
+  Outputs out;
+  const bool o_rflx = ends_with(o, ".rflx");
+  const bool o_expt = ends_with(o, ".expt") || ends_with(o, ".json");
+  const bool pair = args.has("--output-expt") || args.has("--output-refl") ||
+                    (!o.empty() && !o_rflx);
+  if (o_rflx)
+    out.rflx = o;
+  else if (!pair)
+    out.rflx = step + ".rflx";
+  if (pair) {
+    out.expt = args.value("--output-expt", o_expt ? o : step + ".expt");
+    out.refl =
+        args.value("--output-refl",
+                   (!o.empty() && !o_rflx && !o_expt) ? o : step + ".refl");
+  }
+  return out;
+}
+
+void write_outputs(const Outputs &out, const json::Value *experiments,
+                   const Table *reflections, const std::string &creator) {
+  if (!out.rflx.empty())
+    write(out.rflx, experiments, reflections, creator);
+  if (!out.expt.empty() && experiments)
+    json::dump_file(out.expt, *experiments);
+  if (!out.refl.empty() && reflections)
+    write_reflections(out.refl, *reflections);
+}
+
+std::string describe(const Outputs &out, bool experiments, bool reflections) {
+  std::vector<std::string> names;
+  if (!out.rflx.empty())
+    names.push_back(out.rflx);
+  if (!out.expt.empty() && experiments)
+    names.push_back(out.expt);
+  if (!out.refl.empty() && reflections)
+    names.push_back(out.refl);
+  std::string text;
+  for (std::size_t i = 0; i < names.size(); ++i)
+    text += (i == 0 ? "" : (i + 1 == names.size() ? " and " : ", ")) + names[i];
+  return text;
+}
+
 std::vector<std::string> as_pair(const std::vector<std::string> &inputs) {
   if (inputs.size() == 1 && is_hdf5(inputs[0]))
     return {inputs[0], inputs[0]};

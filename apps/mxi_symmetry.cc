@@ -31,8 +31,12 @@ void usage() {
       "                    core by default, the answer the same on any number\n"
       "  --max-delta D     the lattice's symmetry to D degrees of obliquity "
       "(2)\n"
-      "  --output-expt PATH   the models, reindexed (symmetrized.expt)\n"
-      "  --output-refl PATH   the reflections, reindexed (symmetrized.refl)\n"
+      "  -o PATH           where to write: one .rflx (symmetrized.rflx), or "
+      "with\n"
+      "                    a .refl the DIALS pair, as --output-expt, -refl\n"
+      "  --output-expt P   the DIALS pair's experiment list "
+      "(symmetrized.expt)\n"
+      "  --output-refl P   the DIALS pair's reflections (symmetrized.refl)\n"
       "  --timing          where the time goes\n");
 }
 
@@ -40,7 +44,8 @@ void usage() {
 
 int run_program(int argc, char **argv) {
   const std::set<std::string> known = {
-      "--max-delta", "--threads", "--output-expt", "--output-refl", "--timing"};
+      "--max-delta",   "--threads",     "-o",
+      "--output-expt", "--output-refl", "--timing"};
   std::set<std::string> takes_value = known;
   takes_value.erase("--timing");
   Arguments args = parse_arguments(argc, argv, known, takes_value);
@@ -226,13 +231,10 @@ int run_program(int argc, char **argv) {
     const UnitCell after = experiments[0].crystal->cell();
     std::printf("Cell %.3f %.3f %.3f A, %.3f %.3f %.3f deg\n", after.a, after.b,
                 after.c, after.alpha, after.beta, after.gamma);
-    const std::string out_expt =
-        args.value("--output-expt", "symmetrized.expt");
-    const std::string out_refl =
-        args.value("--output-refl", "symmetrized.refl");
-    write_experiments(out_expt, experiments);
-    write_reflections(out_refl, reflections);
-    std::printf("\nWrote %s and %s\n", out_expt.c_str(), out_refl.c_str());
+    const rflx::Outputs out = rflx::outputs(args, "symmetrized");
+    const json::Value document = experiments_to_json(experiments);
+    rflx::write_outputs(out, &document, &reflections, "mxi_symmetry");
+    std::printf("\nWrote %s\n", rflx::describe(out).c_str());
     phase("reindexing and writing");
     timing.report(stdout);
   } catch (const std::exception &error) {

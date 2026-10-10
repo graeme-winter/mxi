@@ -94,24 +94,30 @@ that is not this machine.
 ## Usage
 
 **What you need:** the images, as an NXmx HDF5 master file and its data files.
-`mxi_import` reads the master and writes `imported.expt`, as `dials.import`
-does -- `docs/import.md`, and `dials.import`'s own output serves as well.
+`mxi_import` reads the master and writes `imported.rflx` -- `docs/import.md`.
 
 ### From images to scaled data
 
 ```sh
-mxi_import    master.nxs                                    # -> imported.expt
-mxi_find      imported.expt -o strong.refl                  # spots
-mxi_index     imported.expt strong.refl                     # -> indexed.expt, .refl
-mxi_refine    indexed.expt indexed.refl --analytic          # -> refined.expt, .refl
-mxi_integrate refined.expt refined.refl                     # -> integrated.expt, .refl
-mxi_symmetry  integrated.expt integrated.refl               # -> symmetrized.expt, .refl
-mxi_scale     symmetrized.expt symmetrized.refl --d-min-auto  # -> scaled.expt, .refl
-mxi_export    scaled.expt scaled.refl                       # -> scaled.mtz, unmerged
+mxi_import    master.nxs                         # -> imported.rflx
+mxi_find      imported.rflx                      # -> strong.rflx: the models and the spots
+mxi_index     strong.rflx                        # -> indexed.rflx
+mxi_refine    indexed.rflx --analytic            # -> refined.rflx
+mxi_integrate refined.rflx                       # -> integrated.rflx
+mxi_symmetry  integrated.rflx                    # -> symmetrized.rflx
+mxi_scale     symmetrized.rflx --d-min-auto      # -> scaled.rflx
+mxi_export    scaled.rflx                        # -> scaled.mtz, unmerged
 ```
 
-Each step reads the previous one's pair of files and writes its own, under the
-names shown unless `--output-expt` and `--output-refl` (or `-o`) say otherwise. Each
+Each step reads the previous one's file and writes its own: one `.rflx`, mxi's
+own format (`docs/rflx.md`), HDF5 holding the experiment list and the
+reflections, under the name shown unless `-o` names another. Every program still
+reads the DIALS pair, `.expt` and `.refl`, as before -- `mxi_index imported.expt
+strong.refl` -- and writes it when asked to by `--output-expt` and
+`--output-refl`, or by `-o` naming a `.refl`. `mxi_convert` goes between the two:
+`mxi_convert indexed.rflx` writes `indexed.expt` and `indexed.refl` for DIALS,
+and `mxi_convert indexed.expt indexed.refl` the `.rflx`. Each
+Each
 also writes what it prints to `mxi_<name>.log` in the working directory, as
 DIALS writes `dials.<name>.log`.
 
@@ -273,6 +279,7 @@ The pipeline:
 
 | | |
 | --- | --- |
+| `mxi_convert` | between `.rflx`, mxi's own files, and the DIALS pair, `.expt` and `.refl`, its direction from what it is given; see `docs/rflx.md` |
 | `mxi_import` | an experiment list from NXmx masters, one experiment a sweep, as dials.import writes it; see `docs/import.md` |
 | `mxi_find` | spot finding on the CPU, CUDA or Metal, from NXmx HDF5 |
 | `mxi_index` | FFT indexing with assign, refine and reassign macrocycles |

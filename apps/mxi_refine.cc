@@ -56,8 +56,10 @@ void usage() {
       "  --z-weight W      scale the weight on the rotation-angle residual\n"
       "  --macrocycles N   (3)\n"
       "  --outlier-sigma S (4; 0 disables rejection)\n"
-      "  --output-expt P   (refined.expt)\n"
-      "  --output-refl P   (refined.refl)\n");
+      "  -o PATH           where to write: one .rflx (refined.rflx), or with\n"
+      "                    a .refl the DIALS pair, as --output-expt, -refl\n"
+      "  --output-expt P   the DIALS pair's experiment list (refined.expt)\n"
+      "  --output-refl P   the DIALS pair's reflections (refined.refl)\n");
 }
 } // namespace
 
@@ -160,6 +162,7 @@ int run_program(int argc, char **argv) {
                                        "--shared-crystal",
                                        "--macrocycles",
                                        "--outlier-sigma",
+                                       "-o",
                                        "--output-expt",
                                        "--output-refl",
                                        "--conditional-depth",
@@ -174,9 +177,9 @@ int run_program(int argc, char **argv) {
                                        "--timing",
                                        "--normal-threads"};
   const std::set<std::string> takes_value = {
-      "--macrocycles",      "--outlier-sigma", "--output-expt",
-      "--output-refl",      "--z-weight",      "--min-volume",
-      "--jacobian-threads", "--normal-threads"};
+      "--macrocycles", "--outlier-sigma",    "-o",
+      "--output-expt", "--output-refl",      "--z-weight",
+      "--min-volume",  "--jacobian-threads", "--normal-threads"};
   Arguments args =
       parse_arguments(argc, argv, known, takes_value, {"--scan-varying"});
   // One .rflx stands for the experiment list and the reflections
@@ -228,8 +231,7 @@ int run_program(int argc, char **argv) {
   options.z_weight = args.number("--z-weight", 1.0);
   options.min_volume = args.number("--min-volume", 0.05);
   const bool conditional_depth = args.has("--conditional-depth");
-  const std::string out_expt = args.value("--output-expt", "refined.expt");
-  const std::string out_refl = args.value("--output-refl", "refined.refl");
+  const rflx::Outputs out = rflx::outputs(args, "refined");
 
   try {
     const double t_read_start = now_wall();
@@ -335,10 +337,10 @@ int run_program(int argc, char **argv) {
           c.a, c.b, c.c, c.alpha, c.beta, c.gamma, c.volume());
     }
     const double t_write_start = now_wall();
-    write_experiments(out_expt, experiments);
-    write_reflections(out_refl, reflections);
+    const json::Value document = experiments_to_json(experiments);
+    rflx::write_outputs(out, &document, &reflections, "mxi_refine");
     t_write = now_wall() - t_write_start;
-    std::printf("Wrote %s and %s\n", out_expt.c_str(), out_refl.c_str());
+    std::printf("Wrote %s\n", rflx::describe(out).c_str());
 
     if (args.has("--timing")) {
       Timing timing(true, t_start);

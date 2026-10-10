@@ -1,10 +1,11 @@
 # rflx: one HDF5 file a step
 
-STATUS: agreed 9 October 2026. Built: HDF5 required; the library, src/rflx.cc,
-the tree, the tables and the file; mxi_convert; mxeq reading .rflx; every
-program reading .rflx -- one file for the pair, or either half -- each writing
-from it exactly what it writes from the pair. Still to come: each program
-writing .rflx.
+STATUS: agreed and built, October 2026: HDF5 required; the library,
+src/rflx.cc -- the tree, the tables and the file; mxi_convert; mxeq reading
+.rflx; every program reading it, and writing it unless told the pair. On the
+insulin sweep the chain from images to MTZ on .rflx alone writes, step by step,
+exactly what the pair chain writes, and the same MTZ but for the time it was
+written.
 
 mxi's primary file format becomes `.rflx`: one HDF5 file holding the experiment
 list, the reflection table, or both, in the layout specified by dxtbx-h5
@@ -90,7 +91,17 @@ A program needing reflections refuses a `.rflx` without them, by name.
 it; its extension decides its meaning: `.rflx` one file, `.refl` the meaning `-o`
 has now in mxi_find, mxi_integrate and mxi_scale, so that scripts keep working.
 `--output-expt` and `--output-refl`, where a program has them, still write the
-DIALS pair when given.
+DIALS pair when given, any half not named under its old default name. So a
+script naming its outputs writes what it always wrote: Graeme's chain scripts
+need no change. mxi_import's `-o` naming an `.expt` writes JSON, as before.
+
+Two programs write the pair and join it: mxi_find writes its table, with the
+spot finder's own writer, beside the `.rflx` as `strong.rflx.refl`, then joins
+it with the experiment list it was given -- none, given only a master, and then
+the `.rflx` holds the spots alone -- and removes it. mxi_integrate, whose runs
+call it again for each sweep and for post-refinement, each writing the pair,
+writes the pair beside the `.rflx`, `integrated.rflx.expt` and `.refl`, joins
+them at the end and removes them; a failure leaves neither.
 
 So the chain becomes
 

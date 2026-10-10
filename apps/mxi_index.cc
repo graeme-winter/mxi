@@ -39,8 +39,10 @@ void usage() {
       "  --timing         where the time went, by phase\n"
       "  --tolerance T    how far an index may fall from an integer (0.3)\n"
       "  --candidates N   basis vectors taken from the peak list (30)\n"
-      "  --output-expt P  (default indexed.expt)\n"
-      "  --output-refl P  (default indexed.refl)\n"
+      "  -o PATH           where to write: one .rflx (indexed.rflx), or with\n"
+      "                    a .refl the DIALS pair, as --output-expt, -refl\n"
+      "  --output-expt P   the DIALS pair's experiment list (indexed.expt)\n"
+      "  --output-refl P   the DIALS pair's reflections (indexed.refl)\n"
       "  --macrocycles N  assign/refine/re-assign cycles (3)\n"
       "  --shared-crystal  several sweeps: one crystal throughout, where by\n"
       "                   default the last cycle refines each sweep's apart\n"
@@ -54,25 +56,19 @@ void usage() {
 } // namespace
 
 int run_program(int argc, char **argv) {
-  const std::set<std::string> known = {"--d-min",
-                                       "--max-cell",
-                                       "--grid",
-                                       "--tolerance",
-                                       "--candidates",
-                                       "--output-expt",
-                                       "--output-refl",
-                                       "--quiet",
-                                       "--verbose",
-                                       "--macrocycles",
-                                       "--all-reflections",
-                                       "--timing",
-                                       "--jacobian-threads",
-                                       "--fft-threads",
-                                       "--shared-crystal"};
+  const std::set<std::string> known = {
+      "--d-min",         "--max-cell",         "--grid",
+      "--tolerance",     "--candidates",       "-o",
+      "--output-expt",   "--output-refl",      "--quiet",
+      "--verbose",       "--macrocycles",      "--all-reflections",
+      "--timing",        "--jacobian-threads", "--fft-threads",
+      "--shared-crystal"};
   const std::set<std::string> takes_value = {
-      "--d-min",       "--max-cell",    "--grid",
-      "--tolerance",   "--candidates",  "--output-expt",
-      "--output-refl", "--macrocycles", "--jacobian-threads",
+      "--d-min",       "--max-cell",
+      "--grid",        "--tolerance",
+      "--candidates",  "-o",
+      "--output-expt", "--output-refl",
+      "--macrocycles", "--jacobian-threads",
       "--fft-threads"};
   Arguments args = parse_arguments(argc, argv, known, takes_value);
   // One .rflx stands for the experiment list and the reflections
@@ -114,8 +110,7 @@ int run_program(int argc, char **argv) {
   options.macrocycles = static_cast<int>(args.number("--macrocycles", 3));
   options.split_sweeps = !args.has("--shared-crystal");
   options.refine_on_strong = !args.has("--all-reflections");
-  const std::string out_expt = args.value("--output-expt", "indexed.expt");
-  const std::string out_refl = args.value("--output-refl", "indexed.refl");
+  const rflx::Outputs out = rflx::outputs(args, "indexed");
 
   try {
     const double t_run_start = Timing::now();
@@ -189,10 +184,10 @@ int run_program(int argc, char **argv) {
     add_reciprocal_columns(experiments, reflections);
     update_predictions(experiments, reflections);
     const double t_write_start = Timing::now();
-    write_experiments(out_expt, experiments);
-    write_reflections(out_refl, reflections);
+    const json::Value document = experiments_to_json(experiments);
+    rflx::write_outputs(out, &document, &reflections, "mxi_index");
     const double t_write_seconds = Timing::now() - t_write_start;
-    std::printf("Wrote %s and %s\n", out_expt.c_str(), out_refl.c_str());
+    std::printf("Wrote %s\n", rflx::describe(out).c_str());
 
     if (args.has("--timing")) {
       const IndexTiming &t = result.timing;

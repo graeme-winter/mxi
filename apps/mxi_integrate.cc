@@ -175,9 +175,12 @@ void usage(const char *program) {
   std::printf(
       "usage: %s [options] EXPT [INDEXED_REFL]\n"
       "\n"
-      "  -o FILE           where to write (integrated.refl)\n"
-      "  --output-expt PATH   the models integrated with, and the profile\n"
-      "                    model used (integrated.expt)\n"
+      "  -o FILE           where to write: one .rflx (integrated.rflx) of the\n"
+      "                    reflections, the models and the profile model "
+      "used;\n"
+      "                    or with a .refl the DIALS pair, the .refl that\n"
+      "  --output-expt PATH   the DIALS pair's experiment list "
+      "(integrated.expt)\n"
       "  --images PATH     the image file; by default the .expt's own\n"
       "                    imageset template is used\n"
       "  --postrefine      integrate, refine against the centres integration\n"
@@ -2243,5 +2246,65 @@ int main(int argc, char **argv) {
   // dials.<program>.log; not for a run that only asks for help.
   if (!mxi::only_asks_for_help(argc, argv))
     mxi::mirror_to_log("mxi_integrate.log");
-  return mxi::run_program(argc, argv);
+  if (mxi::only_asks_for_help(argc, argv))
+    return mxi::run_program(argc, argv);
+
+  // Where to write (docs/rflx.md): the pair if named, as always; else one
+  // .rflx. The integration -- one sweep or several, post-refined or not, each
+  // run of it calling run_program again with its own outputs -- writes the
+  // pair, so for a .rflx it writes it under names beside the .rflx's, joined
+  // into the .rflx at the end and removed.
+  std::string o;
+  bool pair = false;
+  for (int i = 1; i < argc; ++i) {
+    const std::string w = argv[i];
+    if ((w == "-o" || w == "--output") && i + 1 < argc)
+      o = argv[i + 1];
+    if (w == "--output-expt" || w == "--output-refl")
+      pair = true;
+  }
+  const auto ends_with = [](const std::string &s, const std::string &t) {
+    return s.size() >= t.size() &&
+           s.compare(s.size() - t.size(), t.size(), t) == 0;
+  };
+  if (pair || (!o.empty() && !ends_with(o, ".rflx")))
+    return mxi::run_program(argc, argv);
+  const std::string rflx = o.empty() ? "integrated.rflx" : o;
+  const std::string half_expt = rflx + ".expt", half_refl = rflx + ".refl";
+  std::vector<std::string> words;
+  for (int i = 0; i < argc; ++i) {
+    const std::string w = argv[i];
+    if ((w == "-o" || w == "--output") && i + 1 < argc) {
+      ++i;
+      continue;
+    }
+    words.push_back(w);
+  }
+  for (const std::string &w :
+       {std::string("-o"), half_refl, std::string("--output-expt"), half_expt})
+    words.push_back(w);
+  std::vector<char *> args;
+  for (std::string &w : words)
+    args.push_back(w.data());
+  args.push_back(nullptr);
+  const int status =
+      mxi::run_program(static_cast<int>(words.size()), args.data());
+  if (status == 0) {
+    try {
+      const mxi::json::Value document =
+          mxi::read_experiment_document(half_expt);
+      const mxi::Table table = mxi::read_reflections(half_refl);
+      mxi::rflx::write(rflx, &document, &table, "mxi_integrate");
+      std::printf("Wrote %s\n", rflx.c_str());
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "mxi_integrate: writing %s: %s\n", rflx.c_str(),
+                   e.what());
+      std::remove(half_expt.c_str());
+      std::remove(half_refl.c_str());
+      return 1;
+    }
+  }
+  std::remove(half_expt.c_str());
+  std::remove(half_refl.c_str());
+  return status;
 }

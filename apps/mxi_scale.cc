@@ -64,8 +64,9 @@ void usage() {
       "  --profile-only    profile-fitted intensities alone, not a mix with\n"
       "                    summation chosen by Rmeas\n"
       "  --shells N        resolution shells in the table (20)\n"
-      "  -o PATH           scaled reflections (scaled.refl)\n"
-      "  --output-expt PATH   the models, reindexed (scaled.expt)\n"
+      "  -o PATH           where to write: one .rflx (scaled.rflx), or with a\n"
+      "                    .refl the DIALS pair, the .refl that\n"
+      "  --output-expt PATH   the DIALS pair's experiment list (scaled.expt)\n"
       "  --threads N       threads to use (0: the machine's); the answer is "
       "the\n"
       "                    same for any number\n"
@@ -453,11 +454,10 @@ int run_program(int argc, char **argv) {
     // dials.scale's columns and flags, so that dials.merge and dials.export
     // take the table on.
     write_scaling(reflections, data, run.g, run.g_variance);
-    const std::string out_refl = args.value("-o", "scaled.refl");
-    const std::string out_expt = args.value("--output-expt", "scaled.expt");
-    write_reflections(out_refl, reflections);
-    write_experiments(out_expt, experiments);
-    std::printf("\nWrote %s and %s\n", out_refl.c_str(), out_expt.c_str());
+    const rflx::Outputs out = rflx::outputs(args, "scaled");
+    const json::Value document = experiments_to_json(experiments);
+    rflx::write_outputs(out, &document, &reflections, "mxi_scale");
+    std::printf("\nWrote %s\n", rflx::describe(out).c_str());
     phase("writing");
     timing.report(stdout);
   } catch (const std::exception &error) {

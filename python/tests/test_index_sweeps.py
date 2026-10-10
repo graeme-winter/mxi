@@ -94,7 +94,16 @@ def rmsd(text):
 @needs
 def test_indexed_in_one_basis_then_each_sweeps_crystal_refined_apart(tmp_path):
     imported_halves(tmp_path)
-    out = run(tmp_path, INDEX, "two.expt", "two.refl")
+    out = run(
+        tmp_path,
+        INDEX,
+        "two.expt",
+        "two.refl",
+        "--output-expt",
+        "indexed.expt",
+        "--output-refl",
+        "indexed.refl",
+    )
     assert "each sweep's crystal apart" in out
     m = re.search(r"Indexed (\d+) of (\d+)", out)
     assert int(m.group(1)) >= 0.95 * int(m.group(2))
@@ -125,11 +134,31 @@ def test_indexed_in_one_basis_then_each_sweeps_crystal_refined_apart(tmp_path):
     shared_dir = tmp_path / "shared"
     for f in ("two.expt", "two.refl"):
         (shared_dir / f).write_bytes((tmp_path / f).read_bytes())
-    out = run(shared_dir, INDEX, "two.expt", "two.refl", "--shared-crystal")
+    out = run(
+        shared_dir,
+        INDEX,
+        "two.expt",
+        "two.refl",
+        "--shared-crystal",
+        "--output-expt",
+        "indexed.expt",
+        "--output-refl",
+        "indexed.refl",
+    )
     assert "each sweep's crystal apart" not in out
     e, crystals = matrices(shared_dir / "indexed.expt")
     assert len(crystals) == 1
     shared = rmsd(
-        run(shared_dir, REFINE, "indexed.expt", "indexed.refl", "--shared-crystal")
+        run(
+            shared_dir,
+            REFINE,
+            "indexed.expt",
+            "indexed.refl",
+            "--shared-crystal",
+            "--output-expt",
+            "refined.expt",
+            "--output-refl",
+            "refined.refl",
+        )
     )
     assert np.sum(apart**2) <= np.sum(shared**2) * 1.001, (apart, shared)
