@@ -466,6 +466,22 @@ history on 20 October: four closed, nine rewritten to what is now true.
 * **93.** **capability -- CUDA on Windows.** The Windows build is the CPU's
     only; the spot finder's and profile fitting's CUDA paths are built and
     tested on Linux. Left from item 89.
+* **97.** **speed -- builds tuned for one CPU (Grace, x86-64-v3).**
+    Parked by Graeme, 16 November, until he has a GH200 of his own to
+    optimise on properly; the Pi 4 a novelty, the GH200 production. The
+    release builds are portable since the fix after
+    1.3.2 (mimalloc for ARMv8.0,
+    scripts/check_arm64_portable.py in the arm64 jobs), LSE still chosen at
+    run time by GCC's outline atomics. What a -mcpu=neoverse-v2 build might
+    add for Grace: little from vectors (its SVE2 is 128 bits, NEON's width),
+    atomics inline, scheduling, dot product and fp16 where the compiler
+    finds use -- a guess of 5 to 15% on the serial CPU parts (indexing's
+    choice of basis, refinement's trial residuals), less overall. The way to
+    find out: an MXI_CPU option passing -mcpu, empty by default; one extra
+    artifact built so, checked against its own target rather than ARMv8.0;
+    both timed with --timing on the GH200; kept as a second artifact only if
+    it gains some 10% overall. The same question for x86: a whole-program
+    x86-64-v3 build against the SSE4.1 baseline with AVX2 dispatched.
 * **96.** **scale -- the calibration's robust columns, where boxes are empty.**
     Noted by Graeme, 15 November: a pathological set, nothing made. (1.4826
     MAD)^2 assumes the deviations vary continuously; where over half a shell's
