@@ -134,6 +134,16 @@ deleted first if one was made (above).
 
 ## What the builds test, and what they cannot
 
+A build's own runner cannot see an instruction an older CPU lacks: GitHub's
+arm64 runner is a Neoverse, with every extension, and 1.3.2's arm64 build passed
+all its tests there and died with SIGILL on a Raspberry Pi 4 (Graeme, 16
+November) -- mimalloc's build compiles it for ARMv8.1 on arm64 unless told
+MI_NO_OPT_ARCH, LSE atomics in every malloc. The arm64 jobs now run
+scripts/check_arm64_portable.py on the program: nothing beyond ARMv8.0 -- no
+LSE, dot product or SVE -- outside libgcc's __aarch64_* outline atomics, which
+have LSE in them and choose at run time, so that a plain grep of the disassembly
+would fail every correct build.
+
 Each build runs ctest and the Python suite, the tests that need no external
 data, before its archive is kept, in a Python of our choosing, 3.12: the
 Linux containers' own, and on macOS one set up for the purpose, the runner's

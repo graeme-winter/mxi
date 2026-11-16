@@ -14,6 +14,12 @@ fixed. The tag of each (`git tag -n99 v1.0.5`) carries the same summary.
   (python/README.md).
 
 **Fixed**
+- The Linux arm64 build of 1.3.2 died with an illegal instruction on ARMv8.0
+  CPUs, a Raspberry Pi 4 for one, before printing anything: mimalloc was
+  compiled for ARMv8.1, its atomics needing LSE. It is compiled for ARMv8.0
+  now, the CPU's own atomics still chosen at run time where it has them; and
+  the arm64 release builds are checked for any instruction an ARMv8.0 CPU
+  lacks.
 - mxi process refused --anomalous as unknown, so an anomalous data set had to
   be scaled again by hand; it now passes it to mxi scale, as it does
   --d-min-auto.

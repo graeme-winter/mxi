@@ -483,6 +483,14 @@ if(MXI_MIMALLOC)
     set(MI_BUILD_STATIC OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_OBJECT ON CACHE BOOL "" FORCE)
     set(MI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    # No architecture-specific code: on arm64 mimalloc's build turns on
+    # -march=armv8.1-a whatever MI_OPT_ARCH says -- LSE atomics in every
+    # malloc -- unless MI_NO_OPT_ARCH. 1.3.2's arm64 build died with SIGILL
+    # on a Raspberry Pi 4 (ARMv8.0) before printing anything (Graeme, 16
+    # November). GCC's outline atomics still give LSE where the CPU has it,
+    # chosen at run time: the GH200 loses nothing.
+    # scripts/check_arm64_portable.py holds the release builds to it.
+    set(MI_NO_OPT_ARCH ON CACHE BOOL "" FORCE)
     add_subdirectory(third_party/mimalloc EXCLUDE_FROM_ALL)
     message(STATUS "malloc: mimalloc (third_party/mimalloc)")
 else()
