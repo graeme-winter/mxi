@@ -164,3 +164,40 @@ def test_mask_hot_needs_somewhere_to_write_them(series):
     )
     assert run.returncode == 2
     assert "--mask-hot writes hot pixels into the experiment list's" in run.stderr
+
+
+def test_mxi_untrusted_hot_adds_them_as_find_finds_them(series):
+    mxi = os.path.join(BUILD, "mxi")
+    subprocess.run(
+        [mxi, "convert", str(series / "l.expt"), "-o", str(series / "in.rflx")],
+        check=True,
+        capture_output=True,
+        cwd=series,
+    )
+    run = subprocess.run(
+        [
+            mxi,
+            "untrusted",
+            str(series / "in.rflx"),
+            "--hot",
+            "-j",
+            "2",
+            "-o",
+            str(series / "masked.rflx"),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=series,
+    )
+    assert run.returncode == 0, run.stderr
+    assert "image set 0, series.nxs: 2 single pixels" in run.stdout
+    sets = rflx.experiments_dict(str(series / "masked.rflx"))["imageset"]
+    assert sets[0]["untrusted"] == [{"panel": 0, "pixels": [[4, 4], [379, 250]]}]
+    assert not list(series.glob("*mxi_untrusted_hot*"))  # the scratch, removed
+    both = subprocess.run(
+        [mxi, "untrusted", str(series / "in.rflx"), "--hot", "--clear"],
+        capture_output=True,
+        text=True,
+        cwd=series,
+    )
+    assert both.returncode == 2 and "one of --set, --clear and --hot" in both.stderr

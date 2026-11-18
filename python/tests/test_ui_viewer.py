@@ -837,3 +837,21 @@ def test_the_masking_menu(strong):
         assert masking_label(0, True, "polygon") == "Masking: 0, not saved (Polygon)"
     finally:
         root.destroy()
+
+
+def test_hot_pixels_are_drawn_and_seen_however_far_out(strong):
+    # mxi find --mask-hot writes single pixels to the untrusted regions; each
+    # is drawn as its own square, never under seven screen pixels across.
+    root, v = open_viewer(strong / "strong.rflx")
+    try:
+        ims = v._imageset()
+        v.regions.add(ims, {"panel": 0, "pixels": [[4, 4], [200, 100], [379, 250]]})
+        v.draw()
+        settle(root, 2)
+        marks = v.canvas.find_withtag("region")
+        assert len(marks) == 3, "one a pixel"
+        for mark in marks:
+            x0, y0, x1, y1 = v.canvas.coords(mark)
+            assert x1 - x0 >= 7 and y1 - y0 >= 7
+    finally:
+        root.destroy()

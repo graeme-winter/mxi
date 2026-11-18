@@ -65,7 +65,8 @@ Each image set of the experiment list keeps its own:
 ```json
 "untrusted": [{"panel": 0, "circle": [729, 866, 40]},
               {"panel": 0, "rectangle": [720, 0, 760, 866]},
-              {"panel": 0, "polygon": [[0, 0], [9, 0], [0, 9]]}]
+              {"panel": 0, "polygon": [[0, 0], [9, 0], [0, 9]]},
+              {"panel": 0, "pixels": [[3192, 1741], [3251, 2077]]}]
 ```
 
 in pixels as DIALS counts them, pixel i spanning i to i + 1: a pixel is
@@ -87,6 +88,34 @@ Setting or clearing writes a new file, `masked.rflx` unless `-o` names another;
 the input is changed only when named. A mask file is `{"imagesets": {"0": [...],
 "1": [...]}}` for the image sets it
 names, or a list of shapes alone for every image set.
+
+## Hot pixels
+
+A pixel signal on too many images -- on every one, or twinkling, hot every other
+image -- is a fault of the detector's, not diffraction (Graeme, 16 November,
+after his DIALS tool). `mxi find` counts how many images each pixel is signal on
+as it goes, at no measurable cost, and says how many reach the share given
+(`--hot-fraction`, 0.25):
+
+``` Hot pixels: 17 on >= 25% of the 3600 images (--hot-fraction): --mask-hot to
+exclude and mask them ```
+
+with the breakdown by share and the worst five, by position, under `--verbose`.
+With `--mask-hot` they are written to the image set's untrusted regions as a
+list of single pixels, the fourth kind beside circles, rectangles and polygons,
+and every later program leaves them out. `mxi untrusted FILE.rflx --hot` does
+the same to a file on its own, running spot finding, every image read, for them:
+the same thresholding, the same judgement.
+
+Judged from 100 images only: a reflection is signal on every image its rocking
+curve covers, and of a short series that can be a large share -- a spot three
+images wide is a tenth of thirty. From 100 at 25% a pixel must be signal on 25
+images, more than any reflection spans but at very fine slicing, which would
+make a pixel hot too. In spot finding they mostly do no harm: one on every image
+is a column through them all, removed as too large; one every other image,
+single pixels removed as too small. In a reflection's box integration would take
+one at its word, which is what the mask is for. `mxi-view` draws each, never
+under seven screen pixels across, so that zoomed out they still show.
 
 ## How they are applied
 

@@ -7,12 +7,13 @@ fixed. The tag of each (`git tag -n99 v1.0.5`) carries the same summary.
 ## Unreleased -- since 1.3.2
 
 **New**
-- mxi find counts how many images each pixel is signal on, and says which are
-  hot: signal on a quarter of the images or more (--hot-fraction), as a pixel
-  reading hot on every image, or every other one, is; from 100 images. With
-  --mask-hot it writes them to the image set's untrusted regions, as single
+- Hot pixels: mxi find counts how many images each pixel is signal on, and
+  says how many are on a quarter of them or more (--hot-fraction), from 100
+  images -- a pixel hot on every image, or twinkling on every other. With
+  --mask-hot it writes them to the image set's untrusted regions as single
   pixels, a new kind beside circles, rectangles and polygons, so that
-  integration and every later step leave them out.
+  integration and every later step leave them out; mxi untrusted --hot does
+  the same to a file on its own, and mxi-view draws them (docs/mask.md).
 - mxeq mtz: two unmerged scaled MTZ files compared -- DIALS's and mxi's, say:
   their headers and columns, the indexing between them found from the
   observations, each observation matched by original indices and batch (ratios

@@ -575,14 +575,16 @@ usage: mxi convert [options] FILE...
 the detector's untrusted regions, with no window.
 
 ```
-usage: mxi untrusted FILE.rflx [--set MASK.json | --clear] [-o OUT.rflx]
+usage: mxi untrusted FILE.rflx [--set MASK.json | --clear | --hot]
+                     [-o OUT.rflx]
   -j, --threads N   threads for everything this does in parallel; 0, every
                     core this job may use (0)
 
 Each image set's untrusted regions -- circles, rectangles and polygons
-on the detector that spot finding and integration leave out, as they do
-the detector's own bad pixels. mxi view draws them; this lists, sets and
-clears them. With neither --set nor --clear, lists them.
+on the detector, and single pixels, that spot finding and integration
+leave out, as they do the detector's own bad pixels. mxi view draws them;
+this lists, sets, clears and adds hot pixels to them. With none of
+--set, --clear and --hot, lists them.
 
   --set MASK.json  the regions from a mask file: {"imagesets": {"0":
                    [shapes], "1": [shapes]}} for each image set named, or
@@ -590,6 +592,10 @@ clears them. With neither --set nor --clear, lists them.
                    {"circle": [x, y, r]}, {"rectangle": [x0, y0, x1,
                    y1]} or {"polygon": [[x, y], ...]}, in pixels, panel 0
   --clear          every image set's regions removed
+  --hot            hot pixels added: those signal on --hot-fraction of
+                   the images or more (0.25), from 100 images, found as
+                   mxi find --mask-hot finds them, every image read
+  --hot-fraction F that share; --gpu to threshold on the GPU
   -o PATH          where to write (masked.rflx): the input is left as it
                    is, to compare with; name it here to write over it
   --help, --version

@@ -27,6 +27,10 @@ def test_which_point_a_shape_holds():
     assert r.contains(rect, 15, 25) and not r.contains(rect, 25, 15)
     assert r.contains(circ, 3, 3) and not r.contains(circ, 4, 4)
     assert r.contains(tri, 2, 2) and not r.contains(tri, 8, 8)
+    hot = {"panel": 0, "pixels": [[10, 10], [50, 60]]}
+    # Within two pixels of one: clicking it exactly, zoomed out, too fiddly.
+    assert r.contains(hot, 10.5, 10.5) and r.contains(hot, 52, 62)
+    assert not r.contains(hot, 30, 30) and not r.contains(hot, 14, 10)
 
 
 def test_each_image_sets_regions_changed_and_undone():

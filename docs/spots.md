@@ -143,6 +143,13 @@ keep it, and a line each tenth of the way where the output is not a terminal.
 Frames are counted as their chunk finishes; reading a stream, whose length is
 not known, it shows none.
 
+## Hot pixels
+
+Each image's signal pixels are counted against their pixel as they are grouped,
+and after the last image those signal on `--hot-fraction` of them or more
+(0.25), from 100 images, are said, and with `--mask-hot` written to the output's
+untrusted regions. docs/mask.md, Hot pixels.
+
 ## Three dimensions, not one frame at a time
 
 A reflection is swept through the Ewald sphere over a degree or two and lands on

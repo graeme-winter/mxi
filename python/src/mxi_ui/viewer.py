@@ -873,6 +873,15 @@ class Viewer:
             elif "polygon" in region:
                 points = [c for p in region["polygon"] for c in self.view.to_canvas(*p)]
                 self.canvas.create_polygon(*points, fill="", **style)
+            elif "pixels" in region:
+                # Hot pixels: each its own square, but never under seven
+                # screen pixels across, so that zoomed out they still show.
+                for px, py in region["pixels"]:
+                    a, b = self.view.to_canvas(px + 0.5, py + 0.5)
+                    half = max(3.5, 0.5 / self.view.scale)
+                    self.canvas.create_rectangle(
+                        a - half, b - half, a + half, b + half, **style
+                    )
         if self._vertices:
             points = [c for p in self._vertices for c in self.view.to_canvas(*p)]
             if len(points) >= 4:

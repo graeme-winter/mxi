@@ -1,6 +1,7 @@
 """The detector's untrusted regions, as the viewer draws them: each image
 set's, in mxi's form (docs/mask.md) -- {"panel": 0, "circle": [x, y, r]},
-{"panel": 0, "rectangle": [x0, y0, x1, y1]}, {"panel": 0, "polygon":
+{"panel": 0, "rectangle": [x0, y0, x1, y1]}, {"panel": 0, "pixels":
+[[x, y], ...]} (hot pixels, from mxi find --mask-hot), {"panel": 0, "polygon":
 [[x, y], ...]} -- in pixels as DIALS counts them, pixel i spanning i to
 i + 1, which are the viewer's own coordinates. Made from what is drawn; undone
 a step at a time, each image set its own; hit by a point, to select one. No
@@ -60,6 +61,13 @@ def contains(region, x, y):
             if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
                 inside = not inside
         return inside
+    if "pixels" in region:
+        # Hot pixels (mxi find --mask-hot): within two pixels of one, as
+        # clicking one exactly, zoomed out, would be too fiddly.
+        return any(
+            px - 2 <= x <= px + 3 and py - 2 <= y <= py + 3
+            for px, py in region["pixels"]
+        )
     return False
 
 
