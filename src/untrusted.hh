@@ -4,13 +4,15 @@
 //
 //     "untrusted": [{"panel": 0, "circle": [x, y, r]},
 //                   {"panel": 0, "rectangle": [x0, y0, x1, y1]},
-//                   {"panel": 0, "polygon": [[x, y], [x, y], ...]}]
+//                   {"panel": 0, "polygon": [[x, y], [x, y], ...]},
+//                   {"panel": 0, "pixels": [[x, y], [x, y], ...]}]
 //
 // in pixels, as DIALS counts them: pixel i spans i to i + 1, so a pixel is
-// inside a shape when its centre, i + 0.5, is. Rasterised for a frame, they
-// join the detector's own pixel_mask (Series::add_masked), so that spot
-// finding and integration, on the CPU and on a device, leave them out as they
-// leave out the detector's bad pixels.
+// inside a shape when its centre, i + 0.5, is. "pixels" lists whole pixels by
+// column and row -- hot pixels, signal on too many images (mxi find).
+// Rasterised for a frame, they join the detector's own pixel_mask
+// (Series::add_masked), so that spot finding and integration, on the CPU and on
+// a device, leave them out as they leave out the detector's bad pixels.
 
 #pragma once
 

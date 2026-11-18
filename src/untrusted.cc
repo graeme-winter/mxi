@@ -106,9 +106,26 @@ std::vector<std::uint64_t> untrusted_pixels(const json::Value &shapes,
             return in;
           },
           &out);
+    } else if (s["pixels"].is_array()) {
+      // Single pixels, by column and row: hot pixels, found by mxi find
+      // --mask-hot or mxi untrusted --hot (16 November). A pixel off the
+      // frame is refused, as a shape that cannot apply.
+      for (const json::Value &p : s["pixels"].as_array()) {
+        if (!p.is_array() || p.as_array().size() != 2)
+          throw std::runtime_error("an untrusted pixel is x, y");
+        const double x = number(p.as_array()[0], "pixel");
+        const double y = number(p.as_array()[1], "pixel");
+        if (x != std::floor(x) || y != std::floor(y) || x < 0.0 || y < 0.0 ||
+            x >= static_cast<double>(width) || y >= static_cast<double>(height))
+          throw std::runtime_error("an untrusted pixel " + std::to_string(x) +
+                                   ", " + std::to_string(y) +
+                                   " is not a whole pixel on the frame");
+        out.push_back(static_cast<std::uint64_t>(y) * width +
+                      static_cast<std::uint64_t>(x));
+      }
     } else {
-      throw std::runtime_error(
-          "an untrusted region is a circle, a rectangle or a polygon");
+      throw std::runtime_error("an untrusted region is a circle, a rectangle, "
+                               "a polygon or a list of pixels");
     }
   }
   std::sort(out.begin(), out.end());
@@ -119,11 +136,13 @@ std::vector<std::uint64_t> untrusted_pixels(const json::Value &shapes,
 std::string describe_untrusted(const json::Value &shapes) {
   if (!shapes.is_array())
     return "none";
-  std::size_t circles = 0, rectangles = 0, polygons = 0;
+  std::size_t circles = 0, rectangles = 0, polygons = 0, pixels = 0;
   for (const json::Value &s : shapes.as_array()) {
     circles += s["circle"].is_array();
     rectangles += s["rectangle"].is_array();
     polygons += s["polygon"].is_array();
+    if (s["pixels"].is_array())
+      pixels += s["pixels"].as_array().size();
   }
   std::string out;
   const auto add = [&](std::size_t k, const char *one, const char *many) {
@@ -136,6 +155,7 @@ std::string describe_untrusted(const json::Value &shapes) {
   add(circles, "circle", "circles");
   add(rectangles, "rectangle", "rectangles");
   add(polygons, "polygon", "polygons");
+  add(pixels, "single pixel", "single pixels");
   return out.empty() ? "none" : out;
 }
 

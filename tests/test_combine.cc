@@ -313,6 +313,33 @@ TEST(untrusted_regions_are_the_pixels_whose_centres_they_hold) {
                  "described");
 }
 
+TEST(single_untrusted_pixels_are_those_pixels_and_no_others) {
+  // Hot pixels (mxi find --mask-hot): whole pixels by column and row, each
+  // exactly its own index, beside the shapes; one off the frame, or not a
+  // whole pixel, refused rather than dropped.
+  const auto shapes = [](const char *text) { return json::parse(text); };
+  const auto p = untrusted_pixels(
+      shapes(R"([{"panel": 0, "pixels": [[3, 2], [0, 0], [9, 9], [3, 2]]},
+                 {"rectangle": [0, 0, 1, 1]}])"),
+      10, 10);
+  check::is_true(p == std::vector<std::uint64_t>{0, 23, 99},
+                 "row-major, sorted, each once");
+  for (const char *bad :
+       {R"([{"pixels": [[10, 0]]}])", R"([{"pixels": [[1.5, 0]]}])",
+        R"([{"pixels": [[1, -1]]}])", R"([{"pixels": [[1]]}])"}) {
+    bool refused = false;
+    try {
+      untrusted_pixels(shapes(bad), 10, 10);
+    } catch (const std::runtime_error &) {
+      refused = true;
+    }
+    check::is_true(refused, std::string("refused: ") + bad);
+  }
+  check::is_true(describe_untrusted(shapes(R"([{"circle": [1,1,1]},
+      {"pixels": [[0,0],[1,1],[2,2]]}])")) == "1 circle, 3 single pixels",
+                 "described by the pixel");
+}
+
 // An option given more than once keeps every value, in order, for mxi_scale's
 // --exclude; value() keeps the last, as it always has.
 TEST(a_repeated_option_keeps_every_value) {
