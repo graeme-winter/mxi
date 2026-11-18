@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write an NXmx series with reflections planted at known positions.
 
-    make_test_nxmx.py <directory> [frames] [--holey]
+    make_test_nxmx.py <directory> [frames] [--holey] [--hot-pixels]
 
 Produces, in <directory>:
 
@@ -202,6 +202,13 @@ def main(argv: list[str]) -> int:
     os.makedirs(directory, exist_ok=True)
     spots = planted_spots(frames)
     stack = make_frames(frames, spots)
+    if "--hot-pixels" in argv:
+        # Hot pixels, between the spots (mxi find --mask-hot): one bright on
+        # every image, one on every other (twinkling), and one on the first
+        # tenth only -- under a quarter, not hot.
+        stack[:, 4, 4] = 500.0
+        stack[::2, 250, 379] = 500.0
+        stack[: max(1, frames // 10), 40, 44] = 500.0
     if bits == 32:
         stack = stack.astype(np.uint32)
         stack[:, :, 44] = np.uint32(0xFFFFFFFF)  # a gap between the spots

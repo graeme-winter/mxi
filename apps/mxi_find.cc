@@ -36,6 +36,7 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -198,6 +199,12 @@ struct Options {
       false; // 32-bit frames narrowed to 16 bits, for a GPU of 16 only
   bool timing = false;
   bool shoeboxes = true;
+  // Hot pixels: signal on hot_fraction of the images or more, said always,
+  // written into the output's untrusted regions with --mask-hot (Graeme, 16
+  // November, after his DIALS tool: a pixel signal on every image, or every
+  // other one).
+  double hot_fraction = 0.25;
+  bool mask_hot = false;
   bool two_d = false;
   bool z_offset_given = false;
   std::int64_t z_offset = 0;
@@ -261,6 +268,11 @@ void usage(const char *program, mxi::Stream to = mxi::Stream::err) {
       "                     fits. The same spots as the 32-bit threshold\n"
       "  --no-shoeboxes     leave out the pixel data, which is most of the\n"
       "                     file and is not needed for indexing\n"
+      "  --hot-fraction F   a pixel signal on this share of the images or "
+      "more\n"
+      "                     is hot, and said (0.25)\n"
+      "  --mask-hot         and written to the output's untrusted regions, so\n"
+      "                     that integration leaves it out\n"
       "  --min-spot-size N  contiguous pixels a spot needs (3)\n"
       "  --max-spot-size N  and the most it may have (1000)\n"
       "  --max-separation D peak to centroid, in pixels; 0 turns it off (2)\n"
@@ -344,6 +356,8 @@ bool parse_options(int argc, char **argv, Options *options) {
                                        "--timing",
                                        "--verbose",
                                        "--no-shoeboxes",
+                                       "--hot-fraction",
+                                       "--mask-hot",
                                        "--2d",
                                        "--min-spot-size",
                                        "--max-spot-size",
@@ -364,6 +378,7 @@ bool parse_options(int argc, char **argv, Options *options) {
                                              "--max-separation",
                                              "--z-offset",
                                              "--chunk",
+                                             "--hot-fraction",
                                              "--progress-from"};
   mxi::Arguments args = mxi::parse_arguments(argc, argv, known, takes_value);
   if (args.help) {
@@ -396,6 +411,15 @@ bool parse_options(int argc, char **argv, Options *options) {
   if (args.has("--verbose"))
     mxi::set_verbose(true);
   options->shoeboxes = !args.has("--no-shoeboxes");
+  options->mask_hot = args.has("--mask-hot");
+  if (args.has("--hot-fraction")) {
+    options->hot_fraction = std::atof(args.value("--hot-fraction", "").c_str());
+    if (!(options->hot_fraction > 0.0 && options->hot_fraction <= 1.0)) {
+      mxi::eprint("--hot-fraction is a share of the images, above 0 and at "
+                  "most 1\n");
+      std::exit(2);
+    }
+  }
   options->two_d = args.has("--2d");
   if (args.has("--min-spot-size"))
     options->grouping.min_spot_size = static_cast<std::size_t>(
@@ -748,6 +772,80 @@ void reconcile(const mxi::ExperimentImages &experiments,
 // The table written, through the library's writers: to its .refl, or into a
 // .rflx (docs/rflx.md) with the experiment list given, if one was. Throws as
 // the writers do.
+//: Each sweep's hot pixels, by its index, row-major: found by find_one, for
+//: write_table to add to the sweep's image set's untrusted regions.
+std::map<std::size_t, std::vector<std::uint32_t>> &hot_pixels() {
+  static std::map<std::size_t, std::vector<std::uint32_t>> hot;
+  return hot;
+}
+
+//: Pixels signal on `fraction` of the `frames` or more, said, and kept for
+//: the sweep. A pixel on every image is a column through them all, one long
+//: spot that the largest size removes; one every other image, single pixels
+//: that the smallest does -- spot finding mostly survives them, but in a
+//: reflection's box integration takes them at their word.
+void judge_hot(const std::vector<std::uint32_t> &signal_on,
+               std::uint64_t frames, std::uint64_t width, double fraction,
+               bool mask, std::size_t index) {
+  hot_pixels()[index].clear();
+  // A reflection is signal on its rocking curve's images, so a pixel needs a
+  // share of a long series to be told from one: of 30 images, a spot 3 wide
+  // is 10% of them. From 100, 25% is 25 images -- slicing so fine that one
+  // reflection spans that many would mark it hot too, and is not judged here.
+  if (frames < 100) {
+    mxi::print("Hot pixels: not judged, from %" PRIu64
+               " images (100 at least)\n",
+               frames);
+    return;
+  }
+  const auto cut = static_cast<std::uint32_t>(
+      std::ceil(fraction * static_cast<double>(frames) - 1e-9));
+  std::vector<std::uint32_t> hot;
+  for (std::size_t i = 0; i < signal_on.size(); ++i)
+    if (signal_on[i] >= std::max<std::uint32_t>(cut, 2))
+      hot.push_back(static_cast<std::uint32_t>(i));
+  const double percent = 100.0 * fraction;
+  if (hot.empty()) {
+    mxi::print("Hot pixels: none signal on %.0f%% of the %" PRIu64
+               " images or more\n",
+               percent, frames);
+    return;
+  }
+  mxi::print("Hot pixels: %zu signal on %.0f%% of the %" PRIu64
+             " images or more (--hot-fraction)\n",
+             hot.size(), percent, frames);
+  std::size_t quarter = 0, half = 0, most = 0;
+  for (std::uint32_t i : hot) {
+    const double share =
+        static_cast<double>(signal_on[i]) / static_cast<double>(frames);
+    (share >= 0.9 ? most : share >= 0.5 ? half : quarter)++;
+  }
+  mxi::print("  of the images: under half %zu, half to 90%% %zu, 90%% or more "
+             "%zu\n",
+             quarter, half, most);
+  std::vector<std::uint32_t> worst = hot;
+  std::stable_sort(worst.begin(), worst.end(),
+                   [&](std::uint32_t a, std::uint32_t b) {
+                     return signal_on[a] > signal_on[b];
+                   });
+  std::string said;
+  for (std::size_t k = 0; k < worst.size() && k < 5; ++k) {
+    char text[64];
+    std::snprintf(text, sizeof text, "%s(%" PRIu64 ", %" PRIu64 ") %.0f%%",
+                  said.empty() ? "" : ", ",
+                  static_cast<std::uint64_t>(worst[k]) % width,
+                  static_cast<std::uint64_t>(worst[k]) / width,
+                  100.0 * signal_on[worst[k]] / static_cast<double>(frames));
+    said += text;
+  }
+  mxi::print("  the most: %s%s\n", said.c_str(),
+             worst.size() > 5 ? ", ..." : "");
+  if (!mask)
+    mxi::print("  not masked: --mask-hot writes them to the untrusted "
+               "regions\n");
+  hot_pixels()[index] = std::move(hot);
+}
+
 void write_table(const Options &options,
                  const std::vector<mxi::SpotPart> &parts, bool shoeboxes) {
   const mxi::Table table = mxi::spot_table(parts, 0, shoeboxes);
@@ -758,6 +856,42 @@ void write_table(const Options &options,
   std::optional<mxi::json::Value> document;
   if (!options.experiments.empty())
     document = mxi::read_experiment_document(options.experiments);
+  if (options.mask_hot && document) {
+    // Each sweep's hot pixels into its own image set's untrusted regions,
+    // beside any already there, as a list of single pixels (untrusted.hh).
+    mxi::json::Value &sets = document->as_object()["imageset"];
+    const mxi::json::Value &experiments = (*document)["experiment"];
+    for (const mxi::SpotPart &part : parts) {
+      const auto found = hot_pixels().find(static_cast<std::size_t>(part.id));
+      if (found == hot_pixels().end() || found->second.empty() ||
+          !sets.is_array())
+        continue;
+      std::size_t at = 0;
+      if (experiments.is_array() &&
+          static_cast<std::size_t>(part.id) < experiments.as_array().size() &&
+          experiments.as_array()[part.id]["imageset"].is_number())
+        at = static_cast<std::size_t>(
+            experiments.as_array()[part.id]["imageset"].as_number());
+      if (at >= sets.as_array().size() || !sets.as_array()[at].is_object())
+        continue;
+      mxi::json::Array pixels;
+      for (std::uint32_t i : found->second)
+        pixels.push_back(mxi::json::Value(mxi::json::Array{
+            mxi::json::Value(static_cast<double>(i % part.width)),
+            mxi::json::Value(static_cast<double>(i / part.width))}));
+      mxi::json::Object region;
+      region["panel"] = mxi::json::Value(0.0);
+      region["pixels"] = mxi::json::Value(std::move(pixels));
+      mxi::json::Object &set = sets.as_array()[at].as_object();
+      if (!set["untrusted"].is_array())
+        set["untrusted"] = mxi::json::Value(mxi::json::Array{});
+      set["untrusted"].as_array().push_back(
+          mxi::json::Value(std::move(region)));
+      mxi::print("Hot pixels masked: %zu, in image set %zu's untrusted "
+                 "regions\n",
+                 found->second.size(), at);
+    }
+  }
   const mxi::json::Value summary = find_summary().document();
   mxi::rflx::write(options.rflx, document ? &*document : nullptr, &table,
                    "mxi_find", false, &summary);
@@ -897,6 +1031,9 @@ std::int32_t find_one(Options options, std::size_t index, mxi::Timing &timing,
       options.grouping.min_spot_size, options.grouping.max_spot_size,
       options.grouping.max_separation);
 
+  // How many images each pixel was signal on: hot pixels (judge_hot).
+  std::vector<std::uint32_t> signal_on(static_cast<std::size_t>(info.width) *
+                                       static_cast<std::size_t>(info.height));
   mxi::spots::Labeller labeller(static_cast<std::size_t>(info.height),
                                 static_cast<std::size_t>(info.width),
                                 options.grouping);
@@ -1098,6 +1235,9 @@ std::int32_t find_one(Options options, std::size_t index, mxi::Timing &timing,
         out_of_order++;
         continue;
       }
+      for (const SignalPixel &p : found.pixels)
+        if (p.index < signal_on.size())
+          ++signal_on[p.index];
       try {
         const double g0 = mxi::Timing::now();
         labeller.add(z, found.pixels);
@@ -1281,6 +1421,9 @@ std::int32_t find_one(Options options, std::size_t index, mxi::Timing &timing,
       }
     }
   }
+  judge_hot(signal_on, static_cast<std::uint64_t>(grouped),
+            static_cast<std::uint64_t>(info.width), options.hot_fraction,
+            options.mask_hot, index);
   // A row a sweep, and the totals over them: each sweep had written over the
   // last's (Graeme's four, only one shown).
   {
@@ -1428,6 +1571,12 @@ int mxi_find_main(int argc, char **argv) {
         o.size() >= 5 && o.compare(o.size() - 5, 5, ".rflx") == 0;
     if (!options.output_named || named_rflx)
       options.rflx = options.output_named ? o : "strong.rflx";
+  }
+  if (options.mask_hot && options.rflx.empty()) {
+    mxi::eprint("--mask-hot writes hot pixels into the experiment list's "
+                "untrusted regions: give an .rflx or an experiment list, and "
+                "write an .rflx\n");
+    return 2;
   }
   // The whole run's clock, from here, for --timing.
   mxi::Timing timing(options.timing);

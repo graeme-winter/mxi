@@ -94,6 +94,10 @@ sweep's images are; or an NXmx master file directly.
                      fits. The same spots as the 32-bit threshold
   --no-shoeboxes     leave out the pixel data, which is most of the
                      file and is not needed for indexing
+  --hot-fraction F   a pixel signal on this share of the images or more
+                     is hot, and said (0.25)
+  --mask-hot         and written to the output's untrusted regions, so
+                     that integration leaves it out
   --min-spot-size N  contiguous pixels a spot needs (3)
   --max-spot-size N  and the most it may have (1000)
   --max-separation D peak to centroid, in pixels; 0 turns it off (2)

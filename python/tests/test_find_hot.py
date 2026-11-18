@@ -1,0 +1,157 @@
+"""Hot pixels (mxi find, 16 November): a pixel signal on a quarter of the
+images or more, after Graeme's DIALS tool -- said always; with --mask-hot,
+written to the image set's untrusted regions, so integration leaves it out.
+
+Planted (mxeq.fixtures.nxmx --hot-pixels, 120 images): one pixel bright on
+every image, one on every other (twinkling), one on the first tenth only."""
+
+import json
+import os
+import subprocess
+import sys
+
+import pytest
+
+from mxeq import rflx
+
+BUILD = os.path.dirname(os.environ.get("MXI_FIND", "")) or os.environ.get(
+    "MXI_BUILD", ""
+)
+FIND = os.path.join(BUILD, "mxi_find")
+
+pytestmark = pytest.mark.skipif(not os.path.exists(FIND), reason="mxi is not built")
+
+FRAMES = 120
+
+
+@pytest.fixture
+def series(tmp_path):
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mxeq.fixtures.nxmx",
+            str(tmp_path),
+            str(FRAMES),
+            "--hot-pixels",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    from mxeq.fixtures import nxmx
+
+    nxmx.write_expt(str(tmp_path / "one.expt"), FRAMES)
+    doc = json.load(open(tmp_path / "one.expt"))
+    doc["experiment"][0]["imageset"] = 0
+    doc["imageset"] = [
+        {"__id__": "ImageSequence", "template": str(tmp_path / "series.nxs")}
+    ]
+    json.dump(doc, open(tmp_path / "l.expt", "w"))
+    return tmp_path
+
+
+def find(where, *extra):
+    return subprocess.run(
+        [
+            FIND,
+            str(where / "l.expt"),
+            "-o",
+            str(where / "strong.rflx"),
+            "-j",
+            "2",
+            *extra,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=where,
+    )
+
+
+def test_the_hot_are_said_and_not_masked_unasked(series):
+    run = find(series)
+    assert run.returncode == 0, run.stderr
+    said = [l for l in run.stdout.splitlines() if l.startswith("Hot pixels")]
+    assert said == [
+        "Hot pixels: 2 signal on 25% of the 120 images or more " "(--hot-fraction)"
+    ]
+    assert "under half 0, half to 90% 1, 90% or more 1" in run.stdout
+    assert "(4, 4) 100%" in run.stdout and "(379, 250) 50%" in run.stdout
+    assert "(44, 40)" not in run.stdout  # a tenth of the images: not hot
+    assert "not masked: --mask-hot" in run.stdout
+    sets = rflx.experiments_dict(str(series / "strong.rflx"))["imageset"]
+    assert "untrusted" not in sets[0]
+
+
+def test_masked_they_are_the_image_sets_untrusted_pixels(series):
+    run = find(series, "--mask-hot")
+    assert run.returncode == 0, run.stderr
+    assert "Hot pixels masked: 2, in image set 0's untrusted regions" in run.stdout
+    sets = rflx.experiments_dict(str(series / "strong.rflx"))["imageset"]
+    regions = sets[0]["untrusted"]
+    assert regions == [{"panel": 0, "pixels": [[4, 4], [379, 250]]}]
+    # A second run on the masked file reads them as masked: no hot pixels
+    # left to find, those two pixels no longer signal.
+    again = subprocess.run(
+        [
+            FIND,
+            str(series / "strong.rflx"),
+            "-o",
+            str(series / "again.rflx"),
+            "-j",
+            "2",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=series,
+    )
+    assert again.returncode == 0, again.stderr
+    assert "Untrusted regions: 2 single pixels, 2 pixels" in again.stdout
+    assert "Hot pixels: none signal on 25% of the 120 images or more" in again.stdout
+
+
+def test_a_lower_fraction_takes_the_occasional_one_too(series):
+    run = find(series, "--hot-fraction", "0.1")
+    assert run.returncode == 0, run.stderr
+    assert "Hot pixels: 3 signal on 10% of the 120 images or more" in run.stdout
+
+
+def test_a_short_series_is_not_judged(tmp_path):
+    # Of 30 images a planted spot, 3 images wide, is a tenth of them: too few
+    # to tell a hot pixel from a reflection.
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mxeq.fixtures.nxmx",
+            str(tmp_path),
+            "30",
+            "--hot-pixels",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    run = subprocess.run(
+        [FIND, str(tmp_path / "series.nxs"), "-o", str(tmp_path / "s.refl")],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+    )
+    assert run.returncode == 0, run.stderr
+    assert "Hot pixels: not judged, from 30 images (100 at least)" in run.stdout
+
+
+def test_mask_hot_needs_somewhere_to_write_them(series):
+    run = subprocess.run(
+        [
+            FIND,
+            str(series / "series.nxs"),
+            "-o",
+            str(series / "strong.refl"),
+            "--mask-hot",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=series,
+    )
+    assert run.returncode == 2
+    assert "--mask-hot writes hot pixels into the experiment list's" in run.stderr
