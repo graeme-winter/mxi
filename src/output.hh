@@ -54,6 +54,7 @@ struct State {
   std::vector<std::FILE *> logs; //: the open logs, the last the one written
   std::string banner;            //: each log's first lines (set_banner)
   bool banner_shown = false;     //: on the terminal yet, at the first log
+  int quiet = 0; //: QuietTerminal's depth: above 0, stdout's lines to the log
 };
 
 inline State &state() {
@@ -64,7 +65,9 @@ inline State &state() {
 inline void emit(Stream to, const char *text, std::size_t n) {
   State &s = state();
   const std::lock_guard<std::mutex> hold(s.lock);
-  if (to == Stream::out) {
+  if (to == Stream::out && s.quiet > 0) {
+    // Quietened (QuietTerminal): the log only.
+  } else if (to == Stream::out) {
     std::fwrite(text, 1, n, stdout);
     if (std::memchr(text, '\n', n) != nullptr)
       std::fflush(stdout);
@@ -97,6 +100,25 @@ inline void vemit(Stream to, const char *format, std::va_list args) {
 }
 
 } // namespace output_detail
+
+//: While one lives, what goes to stdout goes to the open log alone; errors
+//: still to the terminal, and a progress bar, written there directly. For a
+//: step run inside another for one thing it finds -- mxi untrusted --hot's
+//: spot finding, whose tables were not what was asked for (Graeme, 18
+//: November).
+class QuietTerminal {
+public:
+  QuietTerminal() {
+    const std::lock_guard<std::mutex> hold(output_detail::state().lock);
+    ++output_detail::state().quiet;
+  }
+  ~QuietTerminal() {
+    const std::lock_guard<std::mutex> hold(output_detail::state().lock);
+    --output_detail::state().quiet;
+  }
+  QuietTerminal(const QuietTerminal &) = delete;
+  QuietTerminal &operator=(const QuietTerminal &) = delete;
+};
 
 //: printf, to the terminal's stdout and the open log.
 inline void print(const char *format, ...) MXI_PRINTF_LIKE(1, 2);

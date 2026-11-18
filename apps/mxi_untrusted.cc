@@ -4,6 +4,7 @@
 // calls it to save; on its own it applies a mask kept from before to another
 // run's sweeps, with no window.
 
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -50,6 +51,11 @@ const char *const kUsage =
     "                   the images or more (0.25), from 100 images, found as\n"
     "                   mxi find --mask-hot finds them, every image read\n"
     "  --hot-fraction F that share; --gpu to threshold on the GPU\n"
+    "  --hot-list FILE  the hot pixels also as JSON, [[slow, fast], ...] --\n"
+    "                   row then column, as a detector's own pixel mask is\n"
+    "                   indexed -- or, for several image sets, "
+    "{\"imagesets\":\n"
+    "                   {\"0\": [...], ...}}\n"
     "  -o PATH          where to write (masked.rflx): the input is left as it\n"
     "                   is, to compare with; name it here to write over it\n"
     "  --help, --version\n";
@@ -65,10 +71,11 @@ int mxi_untrusted_main(int argc, char **argv) {
   using namespace mxi;
   if (!only_asks_for_help(argc, argv))
     mirror_to_log("mxi_untrusted.log");
-  const Arguments args = parse_arguments(
-      argc, argv,
-      {"-o", "--set", "--clear", "--hot", "--hot-fraction", "--gpu", "--help"},
-      {"-o", "--set", "--hot-fraction"});
+  const Arguments args =
+      parse_arguments(argc, argv,
+                      {"-o", "--set", "--clear", "--hot", "--hot-fraction",
+                       "--hot-list", "--gpu", "--help"},
+                      {"-o", "--set", "--hot-fraction", "--hot-list"});
   if (args.help) {
     mxi::print("%s", kUsage);
     return 0;
@@ -144,19 +151,24 @@ int mxi_untrusted_main(int argc, char **argv) {
       for (std::string &w : words)
         argv_find.push_back(w.data());
       argv_find.push_back(nullptr);
-      mxi::print("Spot finding, for the hot pixels:\n");
-      const std::size_t logs = log_depth();
-      const std::int32_t code =
-          find(static_cast<int>(words.size()), argv_find.data());
-      flush();
-      close_logs_to(logs);
+      // Spot finding's own lines to its log, not the terminal: what was asked
+      // for is the hot pixels (Graeme, 18 November). Its progress bar still
+      // shows, written to the terminal directly.
+      mxi::print("Reading every image for hot pixels:\n");
+      std::int32_t code = 1;
+      {
+        const QuietTerminal quiet;
+        const std::size_t logs = log_depth();
+        code = find(static_cast<int>(words.size()), argv_find.data());
+        flush();
+        close_logs_to(logs);
+      }
       if (code != 0)
-        throw std::runtime_error("spot finding, for the hot pixels, failed");
+        throw std::runtime_error(
+            "spot finding, for the hot pixels, failed: mxi_find.log says why");
       std::optional<json::Value> found = rflx::read_experiments(scratch);
+      const std::optional<json::Value> summary = rflx::read_summary(scratch);
       std::filesystem::remove(scratch);
-      mxi::print("(%s, spot finding's own, read for its hot pixels and "
-                 "removed)\n",
-                 scratch.c_str());
       if (!found || !(*found)["imageset"].is_array() ||
           (*found)["imageset"].as_array().size() != sets.size())
         throw std::runtime_error("spot finding gave back other image sets");
@@ -164,6 +176,70 @@ int mxi_untrusted_main(int argc, char **argv) {
       for (std::size_t k = 0; k < sets.size(); ++k)
         if (with[k].is_object() && with[k]["untrusted"].is_array())
           sets[k].as_object()["untrusted"] = with[k]["untrusted"];
+
+      // Each sweep's, from spot finding's summary: every one, slow then fast
+      // -- a detector's own mask, m[slow, fast] -- with its share.
+      json::Array per_sweep;
+      if (summary) {
+        const std::vector<json::Value> steps = Summary::steps(*summary);
+        if (!steps.empty() && steps.back()["hot_pixels"].is_array())
+          per_sweep = steps.back()["hot_pixels"].as_array();
+      }
+      json::Object listed;
+      for (std::size_t k = 0; k < per_sweep.size(); ++k) {
+        const json::Value &one = per_sweep[k];
+        const auto images =
+            static_cast<std::int64_t>(one["images"].as_number());
+        const double percent = 100.0 * one["fraction"].as_number();
+        if (per_sweep.size() > 1)
+          mxi::print("Image set %zu: ", k);
+        if (!one["judged"].as_bool()) {
+          mxi::print("Hot pixels: not judged, from %" PRId64
+                     " images (100 at least)\n",
+                     images);
+          continue;
+        }
+        const json::Array &pixels = one["pixels"].as_array();
+        if (pixels.empty()) {
+          mxi::print("Hot pixels: none on >= %.0f%% of the %" PRId64
+                     " images\n",
+                     percent, images);
+          continue;
+        }
+        mxi::print("Hot pixels: %zu on >= %.0f%% of the %" PRId64
+                   " images (--hot-fraction)\n",
+                   pixels.size(), percent, images);
+        mxi::print("     slow    fast  images\n");
+        json::Array pairs;
+        for (const json::Value &p : pixels) {
+          const json::Array &e = p.as_array();
+          mxi::print("  %7.0f %7.0f  %5.1f%%\n", e[0].as_number(),
+                     e[1].as_number(),
+                     100.0 * e[2].as_number() / static_cast<double>(images));
+          pairs.push_back(json::Value(json::Array{e[0], e[1]}));
+        }
+        listed[std::to_string(k)] = json::Value(std::move(pairs));
+      }
+      if (args.has("--hot-list")) {
+        const std::string path = args.value("--hot-list", "");
+        json::Value written;
+        if (per_sweep.size() == 1)
+          written =
+              listed.count("0") ? listed["0"] : json::Value(json::Array{});
+        else {
+          json::Object wrapped;
+          wrapped["imagesets"] = json::Value(std::move(listed));
+          written = json::Value(std::move(wrapped));
+        }
+        std::FILE *out = std::fopen(path.c_str(), "w");
+        if (out == nullptr)
+          throw std::runtime_error("cannot write " + path);
+        const std::string text = json::dump(written, 0);
+        std::fputs(text.c_str(), out);
+        std::fputs("\n", out);
+        std::fclose(out);
+        mxi::print("Wrote %s: the hot pixels, [slow, fast]\n", path.c_str());
+      }
       mxi::print("\n");
     }
 

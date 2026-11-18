@@ -80,12 +80,18 @@ def test_the_hot_are_said_and_not_masked_unasked(series):
     assert "untrusted" not in sets[0]
 
 
-def test_verbose_says_which(series):
+def test_verbose_lists_each_slow_then_fast(series):
+    # Slow, then fast: a detector's own mask is m[slow, fast] -- Graeme marks
+    # them there (18 November). Most first; the tenth-of-the-images one not.
     run = find(series, "--verbose")
     assert run.returncode == 0, run.stderr
-    assert "under half 0, half to 90% 1, 90% or more 1" in run.stdout
-    assert "(4, 4) 100%" in run.stdout and "(379, 250) 50%" in run.stdout
-    assert "(44, 40)" not in run.stdout  # a tenth of the images: not hot
+    lines = run.stdout.splitlines()
+    at = lines.index("     slow    fast  images")
+    assert [l.split() for l in lines[at + 1 : at + 3]] == [
+        ["4", "4", "100.0%"],
+        ["250", "379", "50.0%"],
+    ]
+    assert "  40      44" not in run.stdout
 
 
 def test_masked_they_are_the_image_sets_untrusted_pixels(series):
@@ -166,7 +172,10 @@ def test_mask_hot_needs_somewhere_to_write_them(series):
     assert "--mask-hot writes hot pixels into the experiment list's" in run.stderr
 
 
-def test_mxi_untrusted_hot_adds_them_as_find_finds_them(series):
+def test_mxi_untrusted_hot_says_them_and_nothing_else(series):
+    # The hot pixels, every one, slow then fast, and the mask: not spot
+    # finding's tables (Graeme, 18 November). --hot-list as JSON, for a
+    # detector's own pixel mask.
     mxi = os.path.join(BUILD, "mxi")
     subprocess.run(
         [mxi, "convert", str(series / "l.expt"), "-o", str(series / "in.rflx")],
@@ -184,16 +193,36 @@ def test_mxi_untrusted_hot_adds_them_as_find_finds_them(series):
             "2",
             "-o",
             str(series / "masked.rflx"),
+            "--hot-list",
+            str(series / "hot.json"),
         ],
         capture_output=True,
         text=True,
         cwd=series,
     )
     assert run.returncode == 0, run.stderr
-    assert "image set 0, series.nxs: 2 single pixels" in run.stdout
+    out = run.stdout
+    assert "Hot pixels: 2 on >= 25% of the 120 images (--hot-fraction)" in out
+    lines = out.splitlines()
+    at = lines.index("     slow    fast  images")
+    assert [l.split() for l in lines[at + 1 : at + 3]] == [
+        ["4", "4", "100.0%"],
+        ["250", "379", "50.0%"],
+    ]
+    for not_asked in (
+        "Histogram",
+        "Spots by resolution",
+        "Extracted",
+        "reflections to",
+    ):
+        assert not_asked not in out
+    assert "image set 0, series.nxs: 2 single pixels" in out
+    assert json.loads((series / "hot.json").read_text()) == [[4, 4], [250, 379]]
     sets = rflx.experiments_dict(str(series / "masked.rflx"))["imageset"]
     assert sets[0]["untrusted"] == [{"panel": 0, "pixels": [[4, 4], [379, 250]]}]
     assert not list(series.glob("*mxi_untrusted_hot*"))  # the scratch, removed
+    # Spot finding's own lines went to its log.
+    assert "Histogram of spots per image" in (series / "mxi_find.log").read_text()
     both = subprocess.run(
         [mxi, "untrusted", str(series / "in.rflx"), "--hot", "--clear"],
         capture_output=True,

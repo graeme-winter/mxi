@@ -97,15 +97,23 @@ after his DIALS tool). `mxi find` counts how many images each pixel is signal on
 as it goes, at no measurable cost, and says how many reach the share given
 (`--hot-fraction`, 0.25):
 
-``` Hot pixels: 17 on >= 25% of the 3600 images (--hot-fraction): --mask-hot to
-exclude and mask them ```
+```
+Hot pixels: 17 on >= 25% of the 3600 images (--hot-fraction): --mask-hot to exclude and mask them
+```
 
-with the breakdown by share and the worst five, by position, under `--verbose`.
-With `--mask-hot` they are written to the image set's untrusted regions as a
-list of single pixels, the fourth kind beside circles, rectangles and polygons,
-and every later program leaves them out. `mxi untrusted FILE.rflx --hot` does
-the same to a file on its own, running spot finding, every image read, for them:
-the same thresholding, the same judgement.
+With `--verbose` every one is listed, slow then fast, with its share of the
+images. With `--mask-hot` they are written to the image set's untrusted regions
+as a list of single pixels, the fourth kind beside circles, rectangles and
+polygons, and every later program leaves them out.
+
+`mxi untrusted FILE.rflx --hot` is for the mask alone: it reads every image as
+spot finding does, its own output to `mxi_find.log`, not the terminal, and says
+only the hot pixels -- every one, slow then fast, with its share -- and writes
+them into the image set's regions (`masked.rflx`). The order is the detector's
+own: an Eiger's pixel mask is indexed m[slow, fast], so that marking them there
+takes the pairs as they are (Graeme, 18 November). `--hot-list FILE` writes them
+as JSON as well, [[slow, fast], ...]. The untrusted regions keep them [x, y] --
+fast, slow -- as every region is kept.
 
 Judged from 100 images only: a reflection is signal on every image its rocking
 curve covers, and of a short series that can be a large share -- a spot three

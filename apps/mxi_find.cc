@@ -779,6 +779,32 @@ std::map<std::size_t, std::vector<std::uint32_t>> &hot_pixels() {
   return hot;
 }
 
+//: Each sweep's hot pixels in the step's summary, a sweep an entry: images,
+//: the share, and [slow, fast, images] each, most first -- or judged false.
+void record_hot(std::uint64_t frames, double fraction, mxi::json::Array pixels,
+                bool judged = true) {
+  static mxi::json::Array per_sweep;
+  mxi::json::Object one;
+  one["images"] = mxi::json::Value(static_cast<std::int64_t>(frames));
+  one["fraction"] = mxi::json::Value(fraction);
+  one["judged"] = mxi::json::Value(judged);
+  one["pixels"] = mxi::json::Value(std::move(pixels));
+  per_sweep.push_back(mxi::json::Value(std::move(one)));
+  find_summary().set("hot_pixels", mxi::json::Value(per_sweep));
+}
+
+//: The hot pixels, a line each: slow, fast, the share of the images.
+void print_hot_table(const std::vector<std::uint32_t> &order,
+                     const std::vector<std::uint32_t> &signal_on,
+                     std::uint64_t frames, std::uint64_t width) {
+  mxi::print("     slow    fast  images\n");
+  for (std::uint32_t i : order)
+    mxi::print("  %7" PRIu64 " %7" PRIu64 "  %5.1f%%\n",
+               static_cast<std::uint64_t>(i) / width,
+               static_cast<std::uint64_t>(i) % width,
+               100.0 * signal_on[i] / static_cast<double>(frames));
+}
+
 //: Pixels signal on `fraction` of the `frames` or more, said, and kept for
 //: the sweep. A pixel on every image is a column through them all, one long
 //: spot that the largest size removes; one every other image, single pixels
@@ -796,6 +822,7 @@ void judge_hot(const std::vector<std::uint32_t> &signal_on,
     mxi::print("Hot pixels: not judged, from %" PRIu64
                " images (100 at least)\n",
                frames);
+    record_hot(frames, fraction, {}, false);
     return;
   }
   const auto cut = static_cast<std::uint32_t>(
@@ -810,40 +837,30 @@ void judge_hot(const std::vector<std::uint32_t> &signal_on,
   if (hot.empty()) {
     mxi::print("Hot pixels: none on >= %.0f%% of the %" PRIu64 " images\n",
                percent, frames);
+    record_hot(frames, fraction, {});
     return;
   }
   mxi::print("Hot pixels: %zu on >= %.0f%% of the %" PRIu64
              " images (--hot-fraction)%s\n",
              hot.size(), percent, frames,
              mask ? ": masked" : ": --mask-hot to exclude and mask them");
-  if (mxi::verbose()) {
-    std::size_t quarter = 0, half = 0, most = 0;
-    for (std::uint32_t i : hot) {
-      const double share =
-          static_cast<double>(signal_on[i]) / static_cast<double>(frames);
-      (share >= 0.9 ? most : share >= 0.5 ? half : quarter)++;
-    }
-    mxi::print("  of the images: under half %zu, half to 90%% %zu, 90%% or "
-               "more %zu\n",
-               quarter, half, most);
-    std::vector<std::uint32_t> worst = hot;
-    std::stable_sort(worst.begin(), worst.end(),
-                     [&](std::uint32_t a, std::uint32_t b) {
-                       return signal_on[a] > signal_on[b];
-                     });
-    std::string said;
-    for (std::size_t k = 0; k < worst.size() && k < 5; ++k) {
-      char text[64];
-      std::snprintf(text, sizeof text, "%s(%" PRIu64 ", %" PRIu64 ") %.0f%%",
-                    said.empty() ? "" : ", ",
-                    static_cast<std::uint64_t>(worst[k]) % width,
-                    static_cast<std::uint64_t>(worst[k]) / width,
-                    100.0 * signal_on[worst[k]] / static_cast<double>(frames));
-      said += text;
-    }
-    mxi::print("  the most: %s%s\n", said.c_str(),
-               worst.size() > 5 ? ", ..." : "");
-  }
+  // Each, slow then fast as the detector's own mask counts them (m[slow,
+  // fast]), with its images, most first: in the summary always, for mxi
+  // untrusted --hot and mxi report; on the terminal with --verbose.
+  std::vector<std::uint32_t> order = hot;
+  std::stable_sort(order.begin(), order.end(),
+                   [&](std::uint32_t a, std::uint32_t b) {
+                     return signal_on[a] > signal_on[b];
+                   });
+  mxi::json::Array listed;
+  for (std::uint32_t i : order)
+    listed.push_back(mxi::json::Value(mxi::json::Array{
+        mxi::json::Value(static_cast<std::int64_t>(i / width)),
+        mxi::json::Value(static_cast<std::int64_t>(i % width)),
+        mxi::json::Value(static_cast<std::int64_t>(signal_on[i]))}));
+  record_hot(frames, fraction, std::move(listed));
+  if (mxi::verbose())
+    print_hot_table(order, signal_on, frames, width);
   hot_pixels()[index] = std::move(hot);
 }
 

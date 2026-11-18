@@ -596,6 +596,10 @@ this lists, sets, clears and adds hot pixels to them. With none of
                    the images or more (0.25), from 100 images, found as
                    mxi find --mask-hot finds them, every image read
   --hot-fraction F that share; --gpu to threshold on the GPU
+  --hot-list FILE  the hot pixels also as JSON, [[slow, fast], ...] --
+                   row then column, as a detector's own pixel mask is
+                   indexed -- or, for several image sets, {"imagesets":
+                   {"0": [...], ...}}
   -o PATH          where to write (masked.rflx): the input is left as it
                    is, to compare with; name it here to write over it
   --help, --version
