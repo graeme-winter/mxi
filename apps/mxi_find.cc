@@ -805,44 +805,45 @@ void judge_hot(const std::vector<std::uint32_t> &signal_on,
     if (signal_on[i] >= std::max<std::uint32_t>(cut, 2))
       hot.push_back(static_cast<std::uint32_t>(i));
   const double percent = 100.0 * fraction;
+  // One line, as Graeme put it (16 November): how many, the share, and what
+  // to do about them; the breakdown and the worst, with --verbose.
   if (hot.empty()) {
-    mxi::print("Hot pixels: none signal on %.0f%% of the %" PRIu64
-               " images or more\n",
+    mxi::print("Hot pixels: none on >= %.0f%% of the %" PRIu64 " images\n",
                percent, frames);
     return;
   }
-  mxi::print("Hot pixels: %zu signal on %.0f%% of the %" PRIu64
-             " images or more (--hot-fraction)\n",
-             hot.size(), percent, frames);
-  std::size_t quarter = 0, half = 0, most = 0;
-  for (std::uint32_t i : hot) {
-    const double share =
-        static_cast<double>(signal_on[i]) / static_cast<double>(frames);
-    (share >= 0.9 ? most : share >= 0.5 ? half : quarter)++;
+  mxi::print("Hot pixels: %zu on >= %.0f%% of the %" PRIu64
+             " images (--hot-fraction)%s\n",
+             hot.size(), percent, frames,
+             mask ? ": masked" : ": --mask-hot to exclude and mask them");
+  if (mxi::verbose()) {
+    std::size_t quarter = 0, half = 0, most = 0;
+    for (std::uint32_t i : hot) {
+      const double share =
+          static_cast<double>(signal_on[i]) / static_cast<double>(frames);
+      (share >= 0.9 ? most : share >= 0.5 ? half : quarter)++;
+    }
+    mxi::print("  of the images: under half %zu, half to 90%% %zu, 90%% or "
+               "more %zu\n",
+               quarter, half, most);
+    std::vector<std::uint32_t> worst = hot;
+    std::stable_sort(worst.begin(), worst.end(),
+                     [&](std::uint32_t a, std::uint32_t b) {
+                       return signal_on[a] > signal_on[b];
+                     });
+    std::string said;
+    for (std::size_t k = 0; k < worst.size() && k < 5; ++k) {
+      char text[64];
+      std::snprintf(text, sizeof text, "%s(%" PRIu64 ", %" PRIu64 ") %.0f%%",
+                    said.empty() ? "" : ", ",
+                    static_cast<std::uint64_t>(worst[k]) % width,
+                    static_cast<std::uint64_t>(worst[k]) / width,
+                    100.0 * signal_on[worst[k]] / static_cast<double>(frames));
+      said += text;
+    }
+    mxi::print("  the most: %s%s\n", said.c_str(),
+               worst.size() > 5 ? ", ..." : "");
   }
-  mxi::print("  of the images: under half %zu, half to 90%% %zu, 90%% or more "
-             "%zu\n",
-             quarter, half, most);
-  std::vector<std::uint32_t> worst = hot;
-  std::stable_sort(worst.begin(), worst.end(),
-                   [&](std::uint32_t a, std::uint32_t b) {
-                     return signal_on[a] > signal_on[b];
-                   });
-  std::string said;
-  for (std::size_t k = 0; k < worst.size() && k < 5; ++k) {
-    char text[64];
-    std::snprintf(text, sizeof text, "%s(%" PRIu64 ", %" PRIu64 ") %.0f%%",
-                  said.empty() ? "" : ", ",
-                  static_cast<std::uint64_t>(worst[k]) % width,
-                  static_cast<std::uint64_t>(worst[k]) / width,
-                  100.0 * signal_on[worst[k]] / static_cast<double>(frames));
-    said += text;
-  }
-  mxi::print("  the most: %s%s\n", said.c_str(),
-             worst.size() > 5 ? ", ..." : "");
-  if (!mask)
-    mxi::print("  not masked: --mask-hot writes them to the untrusted "
-               "regions\n");
   hot_pixels()[index] = std::move(hot);
 }
 

@@ -72,19 +72,28 @@ def test_the_hot_are_said_and_not_masked_unasked(series):
     assert run.returncode == 0, run.stderr
     said = [l for l in run.stdout.splitlines() if l.startswith("Hot pixels")]
     assert said == [
-        "Hot pixels: 2 signal on 25% of the 120 images or more " "(--hot-fraction)"
+        "Hot pixels: 2 on >= 25% of the 120 images (--hot-fraction): "
+        "--mask-hot to exclude and mask them"
     ]
+    assert "the most:" not in run.stdout  # with --verbose only
+    sets = rflx.experiments_dict(str(series / "strong.rflx"))["imageset"]
+    assert "untrusted" not in sets[0]
+
+
+def test_verbose_says_which(series):
+    run = find(series, "--verbose")
+    assert run.returncode == 0, run.stderr
     assert "under half 0, half to 90% 1, 90% or more 1" in run.stdout
     assert "(4, 4) 100%" in run.stdout and "(379, 250) 50%" in run.stdout
     assert "(44, 40)" not in run.stdout  # a tenth of the images: not hot
-    assert "not masked: --mask-hot" in run.stdout
-    sets = rflx.experiments_dict(str(series / "strong.rflx"))["imageset"]
-    assert "untrusted" not in sets[0]
 
 
 def test_masked_they_are_the_image_sets_untrusted_pixels(series):
     run = find(series, "--mask-hot")
     assert run.returncode == 0, run.stderr
+    assert "Hot pixels: 2 on >= 25% of the 120 images (--hot-fraction): masked" in (
+        run.stdout
+    )
     assert "Hot pixels masked: 2, in image set 0's untrusted regions" in run.stdout
     sets = rflx.experiments_dict(str(series / "strong.rflx"))["imageset"]
     regions = sets[0]["untrusted"]
@@ -106,13 +115,13 @@ def test_masked_they_are_the_image_sets_untrusted_pixels(series):
     )
     assert again.returncode == 0, again.stderr
     assert "Untrusted regions: 2 single pixels, 2 pixels" in again.stdout
-    assert "Hot pixels: none signal on 25% of the 120 images or more" in again.stdout
+    assert "Hot pixels: none on >= 25% of the 120 images" in again.stdout
 
 
 def test_a_lower_fraction_takes_the_occasional_one_too(series):
     run = find(series, "--hot-fraction", "0.1")
     assert run.returncode == 0, run.stderr
-    assert "Hot pixels: 3 signal on 10% of the 120 images or more" in run.stdout
+    assert "Hot pixels: 3 on >= 10% of the 120 images" in run.stdout
 
 
 def test_a_short_series_is_not_judged(tmp_path):
