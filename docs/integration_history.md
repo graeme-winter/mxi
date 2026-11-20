@@ -655,8 +655,8 @@ which has no background in it, and the background estimate has to come from
 somewhere. `box_scale` widens the box on the detector; at 1.9 the extents match
 DIALS. The rotation direction is untouched, since those extents already agreed.
 
-**One thing still disagrees.** Our foreground is 372 voxels where DIALS' is
-462. The `z` extents match, so it is on the detector, and 1.11 per axis is the
+**One thing still disagrees.** Our foreground is 372 voxels where DIALS'
+is 462. The `z` extents match, so it is on the detector, and 1.11 per axis is the
 wrong size to be rounding. Recorded rather than chased, with the oracle that
 will settle it.
 
@@ -820,8 +820,8 @@ string nobody has checked.
 
 **A multi-turn sweep was predicted once, not once per turn.** The reason
 counters found it on their first outing: 749786 predictions of a ten rotation
-sweep, of which 378278 had a `z` off the end of the scan, against DIALS'
-7516507. The ratio is 10.02, which is the number of turns.
+sweep, of which 378278 had a `z` off the end of the scan, against
+DIALS' 7516507. The ratio is 10.02, which is the number of turns.
 
 Two faults, one line apart:
 

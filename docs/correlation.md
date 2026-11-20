@@ -120,8 +120,8 @@ and through mxi's stages 2 and 3 the functional 0.258, 0.045, 0.0019 for
 DIALS's 0.314, 0.050, 0.0016, the same dimension and clusters. DIALS's
 preparation, from its source: ε = 1 under the lattice's Patterson group (I m
 -3 m here), a common resolution limit from its Resolutionizer (1.27 A), and
-each data set normalised by mmtbx's ML isotropic Wilson fit, I x exp(B d*^2 / 4
-- p_scale). The first two barely change the matrix. The normalisation could
+each data set normalised by mmtbx's ML isotropic Wilson fit, I x exp(B d*^2 /
+4 - p_scale). The first two barely change the matrix. The normalisation could
 not be reproduced: with DIALS's own printed B values it made the agreement
 worse (median 0.019), as did every variant tried, though the remaining
 differences track |B_a - B_b| (correlation 0.59); and dials.correlation_matrix

@@ -183,3 +183,38 @@ def test_programs_are_named_as_mxi_commands(document):
         }
     )
     assert not stale, f"{document} still names programs the old way: mxi_{stale}"
+
+
+# Every Markdown file of the repository's own, for the wrapping test: not
+# only DOCUMENTS, which the other checks were built on -- correlation.md and
+# multi-lattice.md had wrapped lines too and are in neither.
+ALL_MARKDOWN = sorted(
+    str(f.relative_to(ROOT))
+    for f in ROOT.rglob("*.md")
+    if not ({"third_party", ".git", "node_modules", "build"} & set(f.parts))
+    and not any(part.startswith(".") for part in f.relative_to(ROOT).parts)
+)
+
+
+@pytest.mark.parametrize("document", ALL_MARKDOWN)
+def test_no_wrapped_line_reads_as_a_list_item(document):
+    """A line of prose that wrapping starts with "+ ", "- " or "167. " is a
+    list item to Markdown: review.md's "I_bg (1 / + m/n)" rendered as a
+    bullet in mid-sentence (Graeme, 19 November). A list is allowed after a
+    heading, a table, a bold label such as **New**, or a line ending in ":"."""
+    marker = re.compile(r"^(\+|-|\*|\d+[.)])\s")
+    allowed_before = re.compile(
+        r"^\s*(\+|-|\*|\d+[.)])\s|^\s{2,}|^#|^\||^\*\*.*\*\*$|:$"
+    )
+    lines = (ROOT / document).read_text().splitlines()
+    fence, found = False, []
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if fence or i == 0 or not marker.match(line):
+            continue
+        before = lines[i - 1]
+        if before.strip() and not allowed_before.search(before):
+            found.append(f"{document}:{i + 1}: {line[:60]}")
+    assert not found, "\n".join(found)

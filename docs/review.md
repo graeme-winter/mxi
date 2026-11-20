@@ -369,8 +369,8 @@ Measured on two crystals of insulin, both programs' output on the same
 observations: DIALS's default integrator, 3d, finds overlapping reflections
 and masks nothing with them; dials.scale's final sigma, judged by each
 observation's exact deviation from its equivalents, some 30 per cent small for
-the stronger two-thirds (`docs/scaling.md`). DIALS's summed variance is |I| + I_bg (1
-+ m/n) (summation.h): it moves with each observation's noise, but evenly either
+the stronger two-thirds (`docs/scaling.md`). DIALS's summed variance is |I| + I_bg
+(1 + m/n) (summation.h): it moves with each observation's noise, but evenly either
 side of zero, so it does not lean a weighted mean as mxi's did -- the counted
 foreground, I + I_bg, until October; now max(I, 0) + I_bg, and in scaling the
 model's intensity.

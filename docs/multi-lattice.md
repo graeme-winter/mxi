@@ -391,8 +391,8 @@ decided.
 **Integration** -- the target of stage 5. A profile model a lattice: sigma_b
 0.0227 and 0.0206 degrees, sigma_m 0.0473 and 0.0454; scan-varying crystals.
 Predicted 42107 and 42244; summation-integrated 41569 and 41739, profile-fitted
-40678 and 40827. Foreground with bad pixels 538 and 505; background 2712 and
-2356. No reflection flagged overlapped -- DIALS's overlap filter is off by
+40678 and 40827. Foreground with bad pixels 538 and 505; background 2712
+and 2356. No reflection flagged overlapped -- DIALS's overlap filter is off by
 default; each reflection's background excludes others' foregrounds instead.
 
 ## Questions settled

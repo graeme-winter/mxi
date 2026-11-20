@@ -573,8 +573,8 @@ two crystals.
 
 Then the fit itself, and the copying for it: every background pixel copied out
 as a double and read some five times, memory traffic on ferritin's
-background-heavy boxes, where the passes' saving was only 183 thread-seconds to
-167. Now the background is a histogram of its counts (integers 0 to 4095) and
+background-heavy boxes, where the passes' saving was only 183 thread-seconds
+to 167. Now the background is a histogram of its counts (integers 0 to 4095) and
 the fit and the dispersion go over the distinct values, each with how many
 pixels hold it (glm_background_counted); any other value sends the box down the
 pixel-by-pixel path. Not bit-identical: sums in another order, so the fit can
