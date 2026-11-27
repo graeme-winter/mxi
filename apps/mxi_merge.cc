@@ -128,7 +128,8 @@ Selected select(const Table &in, const gemmi::UnitCell &cell,
 // is seen to reproduce scaling's figures (Graeme, 26 November).
 void print_statistics(const ExperimentList &experiments, const Table &in,
                       const std::string &hall, std::int64_t only_id,
-                      std::int32_t shells) {
+                      std::int32_t shells, const gemmi::UnitCell &cell,
+                      double d_min, double d_max) {
   const SpaceGroup group = SpaceGroup::from_hall(hall);
   // The rows scaling had: not those it excluded -- beyond its resolution
   // limit, say, which never entered its data -- but its outliers, which did,
@@ -145,6 +146,18 @@ void print_statistics(const ExperimentList &experiments, const Table &in,
     for (std::size_t r = 0; r < in.nrows; ++r) {
       if (only_id >= 0 && (!has_id || in.at("id").integer(r) != only_id))
         continue;
+      // Within --d-min and --d-max, by the cell the merge uses: the
+      // statistics of what was merged (Graeme, 27 November: with --d-min 1.3
+      // the summary went to 1.14 A, every row scaling had).
+      if (d_min > 0.0 || d_max > 0.0) {
+        const Column &hkl = in.at("miller_index");
+        const double d =
+            cell.calculate_d({static_cast<int>(hkl.ints[r * 3]),
+                              static_cast<int>(hkl.ints[r * 3 + 1]),
+                              static_cast<int>(hkl.ints[r * 3 + 2])});
+        if ((d_min > 0.0 && d < d_min) || (d_max > 0.0 && d > d_max))
+          continue;
+      }
       const std::int64_t f = flags.integer(r);
       const bool outlier = (f & kOutlier) != 0;
       const bool excluded = (f & (kBadForScaling & ~kOutlier)) != 0 ||
@@ -481,7 +494,8 @@ int run_merge(int argc, char **argv) {
       mxi::print(
           "\n  space group %s; cell %.3f %.3f %.3f A, %.3f %.3f %.3f deg\n",
           group->hm, c.a, c.b, c.c, c.alpha, c.beta, c.gamma);
-      print_statistics(experiments, in, hall, only_id, shells);
+      print_statistics(experiments, in, hall, only_id, shells, gc, d_min,
+                       d_max);
     };
     if (each) {
       const std::string stem =

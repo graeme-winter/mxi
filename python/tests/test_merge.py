@@ -107,3 +107,35 @@ def test_the_merge_reproduces_scalings_merging_statistics(tmp_path):
     summary = _summary(scaled)
     assert len(summary) > 15
     assert _summary(merged) == summary
+
+
+def test_the_summary_describes_what_was_merged_within_the_limits(tmp_path):
+    """Graeme, 27 November: with --d-min 1.3 the summary went to 1.14 A --
+    every row scaling had -- while the file stopped at 1.3. The summary is
+    of what was merged: its limits within those asked for, its totals the
+    counts the line above it gives."""
+    import re
+
+    run("scale", DATA, "-o", "scaled.rflx", cwd=tmp_path)
+    out = run(
+        "merge",
+        "scaled.rflx",
+        "--d-min",
+        "2.0",
+        "--d-max",
+        "20",
+        "-o",
+        "merged.mtz",
+        cwd=tmp_path,
+    )
+    head = re.search(
+        r"(\d+) observations merged to (\d+) reflections, ([\d.]+) to ([\d.]+) A",
+        out,
+    )
+    observations, unique = int(head.group(1)), int(head.group(2))
+    high = float(re.search(r"^High resolution limit\s+([\d.]+)", out, re.M).group(1))
+    low = float(re.search(r"^Low resolution limit\s+([\d.]+)", out, re.M).group(1))
+    assert high >= 2.0 and low <= 20.0, (high, low)
+    total = int(re.search(r"^Total observations\s+(\d+)", out, re.M).group(1))
+    total_unique = int(re.search(r"^Total unique\s+(\d+)", out, re.M).group(1))
+    assert (total, total_unique) == (observations, unique)

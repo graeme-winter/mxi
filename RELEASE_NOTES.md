@@ -4,6 +4,14 @@ Newest first. Each release lists first what changes results or commands -- a
 default changed, an option renamed or gone -- then what is new, then what is
 fixed. The tag of each (`git tag -n99 v1.0.5`) carries the same summary.
 
+## Unreleased -- since 1.3.4
+
+**Fixed**
+- mxi merge --d-min and --d-max limited the file but not the summary of the
+  merging statistics, which went on to every row scaling had: with --d-min
+  1.3, a summary to 1.14 A. The summary is now of what was merged, its totals
+  the counts on the line above it.
+
 ## 1.3.4 -- 26 November 2026
 
 **New**

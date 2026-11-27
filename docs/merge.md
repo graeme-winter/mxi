@@ -47,7 +47,10 @@ both give mxi scale's summary to the digit (Graeme, 26 November: since we are
 merging it should at least reproduce the merging statistics -- this table, not
 the long one). The figure "left out" in the line above it counts the same rows:
 on 9uoa, 83,145, those beyond 1.76 A and the outliers. --shells N as mxi
-scale's, which sets the Low and High shells.
+scale's, which sets the Low and High shells. Within --d-min and --d-max where
+they are given, by the cell the merge uses: the summary is of what was merged,
+its totals the counts on the line above it (27 November: it had gone on to every
+row scaling had).
 
 ## Amplitudes
 
